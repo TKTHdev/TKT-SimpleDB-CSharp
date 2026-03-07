@@ -8,9 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Remove="DBSharp.Tests/**/*.cs" />
-    <EmbeddedResource Remove="DBSharp.Tests/**/*" />
-    <None Remove="DBSharp.Tests/**/*" />
+    <ProjectReference Include="..\DBSharp.csproj" />
   </ItemGroup>
 
 </Project>

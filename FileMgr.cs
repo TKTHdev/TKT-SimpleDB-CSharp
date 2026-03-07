@@ -9,7 +9,7 @@ public class FileMgr
     {
         _dbDirectory = dbDirectory;
         _blockSize = blocksize;
-        _isNew = dbDirectory.Exists;
+        _isNew = !dbDirectory.Exists;
         if (_isNew)
             _dbDirectory.Create();
         foreach (string filename in Directory.GetFiles(_dbDirectory.FullName))
