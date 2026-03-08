@@ -15,13 +15,13 @@ public class FileMgr
         public void RecordBlocksWriten(int numofblocks) => _blocksWritten += numofblocks;
         public void RecordBlocksRead(int numofblocks) => _blocksRead += numofblocks;
         public void RecordBlocksAppended(int numofblocks) => _blocksAppended += numofblocks;
-        public (int,int, int) GetStats() => (_blocksWritten, _blocksRead, _blocksAppended);
+        public (int, int, int) GetStats() => (_blocksWritten, _blocksRead, _blocksAppended);
     }
     private readonly DirectoryInfo _dbDirectory;
     private readonly int _blockSize;
     private readonly bool _isNew;
     private readonly Dictionary<string, FileStream> _openFiles = new();
-    private FileMgrStatistics FileMgrStats =  new();
+    private FileMgrStatistics FileMgrStats = new();
     public FileMgr(DirectoryInfo dbDirectory, int blocksize)
     {
         _dbDirectory = dbDirectory;
@@ -81,7 +81,7 @@ public class FileMgr
     }
     public BlockId Append(string filename)
     {
-        lock(this)
+        lock (this)
         {
             int newblknum = Length(filename);
             BlockId blk = new BlockId(filename, newblknum);
@@ -92,7 +92,7 @@ public class FileMgr
                 fs.Seek(blk.Number() * _blockSize, SeekOrigin.Begin);
                 fs.Write(b);
             }
-            catch(IOException e)
+            catch (IOException e)
             {
                 throw new Exception("cannot appene block " + blk, e);
             }
@@ -116,7 +116,7 @@ public class FileMgr
         _openFiles[filename] = fs;
         return fs;
     }
-    public (int,int,int) GetStats()
+    public (int, int, int) GetStats()
     {
         return FileMgrStats.GetStats();
     }

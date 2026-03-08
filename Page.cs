@@ -17,7 +17,7 @@ public class Page
     }
     public void SetInt(int offset, int val)
     {
-        if(offset + sizeof(int) > _bb.Length)
+        if (offset + sizeof(int) > _bb.Length)
             throw new ArgumentException("offset exceeds page size");
         BitConverter.GetBytes(val).CopyTo(_bb, offset);
     }
@@ -28,7 +28,7 @@ public class Page
     }
     public void SetShort(int offset, short val)
     {
-        if(offset + sizeof(short) > _bb.Length)
+        if (offset + sizeof(short) > _bb.Length)
             throw new ArgumentException("offset exceeds page size");
         BitConverter.GetBytes(val).CopyTo(_bb, offset);
     }
@@ -39,7 +39,7 @@ public class Page
     }
     public void SetBool(int offset, bool val)
     {
-        if(offset + sizeof(bool) > _bb.Length)
+        if (offset + sizeof(bool) > _bb.Length)
             throw new ArgumentException("offset exceeds page size");
         BitConverter.GetBytes(val).CopyTo(_bb, offset);
     }
@@ -50,7 +50,7 @@ public class Page
     }
     public void SetDateTime(int offset, DateTime val)
     {
-        if(offset + sizeof(long) > _bb.Length)
+        if (offset + sizeof(long) > _bb.Length)
             throw new ArgumentException("offset exceeds page size");
         BitConverter.GetBytes(val.Ticks).CopyTo(_bb, offset);
     }
