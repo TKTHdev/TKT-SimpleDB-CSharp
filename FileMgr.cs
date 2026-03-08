@@ -60,6 +60,26 @@ public class FileMgr
             throw new Exception("cannot access " + filename, e);
         }
     }
+    public BlockId Append(string filename)
+    {
+        lock(this)
+        {
+            int newblknum = Length(filename);
+            BlockId blk = new BlockId(filename, newblknum);
+            byte[] b = new byte[_blockSize];
+            try
+            {
+                FileStream fs = GetFile(blk.FileName());
+                fs.Seek(blk.Number() * _blockSize, SeekOrigin.Begin);
+                fs.Write(b);
+            }
+            catch(IOException e)
+            {
+                throw new Exception("cannot appene block " + blk, e);
+            }
+            return blk;
+        }
+    }
     public bool IsNew()
     {
         return _isNew;
