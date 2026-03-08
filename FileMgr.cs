@@ -5,23 +5,17 @@ public class FileMgr
     {
         private int _blocksWritten;
         private int _blocksRead;
+        private int _blocksAppended;
         public FileMgrStatistics()
         {
             _blocksRead = 0;
             _blocksWritten = 0;
+            _blocksAppended = 0;
         }
-        public void RecordBlocksWriten(int numofblocks)
-        {
-            _blocksWritten += numofblocks;
-        }
-        public void RecordBlocksRead(int numofblocks)
-        {
-            _blocksRead += numofblocks;
-        }
-        public (int,int) GetStats()
-        {
-            return (_blocksWritten, _blocksRead);
-        }
+        public void RecordBlocksWriten(int numofblocks) => _blocksWritten += numofblocks;
+        public void RecordBlocksRead(int numofblocks) => _blocksRead += numofblocks;
+        public void RecordBlocksAppended(int numofblocks) => _blocksAppended += numofblocks;
+        public (int,int, int) GetStats() => (_blocksWritten, _blocksRead, _blocksAppended);
     }
     private readonly DirectoryInfo _dbDirectory;
     private readonly int _blockSize;
@@ -122,7 +116,7 @@ public class FileMgr
         _openFiles[filename] = fs;
         return fs;
     }
-    public (int,int) GetStats()
+    public (int,int,int) GetStats()
     {
         return FileMgrStats.GetStats();
     }
