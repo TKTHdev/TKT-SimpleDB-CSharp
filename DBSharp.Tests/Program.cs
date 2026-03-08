@@ -105,13 +105,14 @@ static void Page_StringRoundTrip()
     var page = new Page(64);
 
     page.SetString(12, "dbsharp");
+    page.SetString(12, "db");
 
-    Assert.Equal("dbsharp", page.GetString(12));
+    Assert.Equal("db", page.GetString(12));
 }
 
 static void Page_MaxLengthMatchesCharsetContract()
 {
-    var expected = sizeof(int) + (10 * Encoding.ASCII.GetMaxByteCount(1));
+    var expected = (10 + 1) * Encoding.ASCII.GetMaxByteCount(1);
 
     Assert.Equal(expected, Page.MaxLength(10));
 }
