@@ -10,6 +10,10 @@ public class Page
     {
         _bb = new byte[blocksize];
     }
+    public Page(byte[] b)
+    {
+        _bb = b;
+    }
     public int GetInt(int offset)
     {
         int val = BitConverter.ToInt32(_bb, offset);
