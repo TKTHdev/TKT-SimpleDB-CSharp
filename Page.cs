@@ -17,6 +17,8 @@ public class Page
     }
     public void SetInt(int offset, int val)
     {
+        if(offset + sizeof(int) > _bb.Length)
+            throw new ArgumentException("offset exceeds page size");
         BitConverter.GetBytes(val).CopyTo(_bb, offset);
     }
     public byte[] GetBytes(int offset)
@@ -28,6 +30,8 @@ public class Page
     }
     public void SetBytes(int offset, byte[] b)
     {
+        if (offset + sizeof(int) + b.Length > _bb.Length)
+            throw new ArgumentException("data exceeds page size");
         BitConverter.GetBytes(b.Length).CopyTo(_bb, offset);
         Array.Copy(b, 0, _bb, offset + 4, b.Length);
     }
@@ -38,6 +42,7 @@ public class Page
     }
     public void SetString(int offset, string s)
     {
+        
         byte[] b = CHARSET.GetBytes(s);
         SetBytes(offset, b);
     }
