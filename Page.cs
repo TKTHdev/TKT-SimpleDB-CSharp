@@ -70,19 +70,24 @@ public class Page
     }
     public string GetString(int offset)
     {
-        byte[] b = GetBytes(offset);
-        return CHARSET.GetString(b);
+        int end = offset;
+        while (end < _bb.Length && _bb[end] != 0)
+            end++;
+
+        return CHARSET.GetString(_bb, offset, end - offset);
     }
     public void SetString(int offset, string s)
     {
-
         byte[] b = CHARSET.GetBytes(s);
-        SetBytes(offset, b);
+        if (offset + b.Length + 1 > _bb.Length)
+            throw new ArgumentException("data exceeds page size");
+        Array.Copy(b, 0, _bb, offset, b.Length);
+        _bb[offset + b.Length] = (byte)'\0';
     }
     public static int MaxLength(int strlen)
     {
         int bytesPerChar = CHARSET.GetMaxByteCount(1);
-        return sizeof(int) + (strlen * bytesPerChar);
+        return (strlen + 1) * bytesPerChar;
     }
     internal byte[] Contents()
     {
