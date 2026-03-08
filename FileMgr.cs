@@ -1,10 +1,33 @@
 namespace DBSharp;
 public class FileMgr
 {
+    public class FileMgrStatistics
+    {
+        private int _blocksWritten;
+        private int _blocksRead;
+        public FileMgrStatistics()
+        {
+            _blocksRead = 0;
+            _blocksWritten = 0;
+        }
+        public void RecordBlocksWriten(int numofblocks)
+        {
+            _blocksWritten += numofblocks;
+        }
+        public void RecordBlocksRead(int numofblocks)
+        {
+            _blocksRead += numofblocks;
+        }
+        public (int,int) GetStats()
+        {
+            return (_blocksWritten, _blocksRead);
+        }
+    }
     private readonly DirectoryInfo _dbDirectory;
     private readonly int _blockSize;
     private readonly bool _isNew;
     private readonly Dictionary<string, FileStream> _openFiles = new();
+    private FileMgrStatistics FileMgrStats =  new();
     public FileMgr(DirectoryInfo dbDirectory, int blocksize)
     {
         _dbDirectory = dbDirectory;
@@ -25,6 +48,7 @@ public class FileMgr
                 FileStream fs = GetFile(blk.FileName());
                 fs.Seek(blk.Number() * _blockSize, SeekOrigin.Begin);
                 fs.Read(p.Contents(), 0, _blockSize);
+                FileMgrStats.RecordBlocksRead(1);
             }
             catch (IOException e)
             {
@@ -41,6 +65,7 @@ public class FileMgr
                 FileStream fs = GetFile(blk.FileName());
                 fs.Seek(blk.Number() * _blockSize, SeekOrigin.Begin);
                 fs.Write(p.Contents());
+                FileMgrStats.RecordBlocksWriten(1);
             }
             catch (IOException e)
             {
@@ -96,5 +121,9 @@ public class FileMgr
         fs = new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
         _openFiles[filename] = fs;
         return fs;
+    }
+    public (int,int) GetStats()
+    {
+        return FileMgrStats.GetStats();
     }
 }
