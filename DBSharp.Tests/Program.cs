@@ -16,6 +16,7 @@ var tests = new (string Name, Action Body)[]
     ("FileMgr reads and writes blocks", FileMgr_ReadWriteRoundTrip),
     ("FileMgr length tracks the highest written block", FileMgr_LengthTracksWrittenBlocks),
     ("FileMgr keeps file lengths isolated per file", FileMgr_LengthIsPerFile),
+    ("LogMgr creates records and iterates in reverse", LogMgr_CreateAndIterate),
 };
 
 var failures = new List<string>();
@@ -195,6 +196,75 @@ static void FileMgr_LengthIsPerFile()
 
     Assert.Equal(1, fileMgr.Length("users.tbl"));
     Assert.Equal(2, fileMgr.Length("orders.tbl"));
+}
+
+static void LogMgr_CreateAndIterate()
+{
+    var dbPath = CreateDirectory();
+    var fm = new FileMgr(new DirectoryInfo(dbPath), 400);
+    var lm = new LogMgr(fm, "simpledb.log");
+
+    // --- createRecords(1, 35) ---
+    for (int i = 1; i <= 35; i++)
+    {
+        byte[] rec = CreateLogRecord("record" + i, i + 100);
+        lm.Append(rec);
+    }
+
+    // printLogRecords – verify all 35 records, newest first
+    {
+        var records = new List<(string s, int n)>();
+        foreach (byte[] rec in lm.GetEnumerator())
+        {
+            var p = new Page(rec);
+            string s = p.GetString(0);
+            int npos = Page.MaxLength(s.Length);
+            int val = p.GetInt(npos);
+            records.Add((s, val));
+        }
+        Assert.Equal(35, records.Count);
+        // newest record first (record35), oldest last (record1)
+        Assert.Equal("record35", records[0].s);
+        Assert.Equal(135, records[0].n);
+        Assert.Equal("record1", records[records.Count - 1].s);
+        Assert.Equal(101, records[records.Count - 1].n);
+    }
+
+    // --- createRecords(36, 70) ---
+    for (int i = 36; i <= 70; i++)
+    {
+        byte[] rec = CreateLogRecord("record" + i, i + 100);
+        lm.Append(rec);
+    }
+    lm.Flush(65);
+
+    // printLogRecords – verify all 70 records
+    {
+        var records = new List<(string s, int n)>();
+        foreach (byte[] rec in lm.GetEnumerator())
+        {
+            var p = new Page(rec);
+            string s = p.GetString(0);
+            int npos = Page.MaxLength(s.Length);
+            int val = p.GetInt(npos);
+            records.Add((s, val));
+        }
+        Assert.Equal(70, records.Count);
+        Assert.Equal("record70", records[0].s);
+        Assert.Equal(170, records[0].n);
+        Assert.Equal("record1", records[records.Count - 1].s);
+        Assert.Equal(101, records[records.Count - 1].n);
+    }
+}
+
+static byte[] CreateLogRecord(string s, int n)
+{
+    int npos = Page.MaxLength(s.Length);
+    byte[] b = new byte[npos + sizeof(int)];
+    var p = new Page(b);
+    p.SetString(0, s);
+    p.SetInt(npos, n);
+    return b;
 }
 
 static string CreateDirectory()
