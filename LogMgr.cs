@@ -36,6 +36,23 @@ public class LogMgr
        flush();
        return new LogIterator(_fm, _currentblk); 
     }
+    public int Append(byte[] logrec)
+    {
+        int boundary = _logpage.GetInt(0);
+        int recsize = logrec.Length;
+        int bytesneeded = recsize + sizeof(int);
+        if (boundary - bytesneeded < sizeof(int))
+        {
+            flush();
+            _currentblk = appendNewBlock();
+            boundary = _logpage.GetInt(0);
+        }
+        int recpos = boundary - bytesneeded;
+        _logpage.SetBytes(recpos, logrec);
+        _logpage.SetInt(0, recpos);
+        _latestLSN += 1;
+        return _latestLSN;
+    }
     private BlockId appendNewBlock()
     {
         BlockId blk = _fm.Append(_logfile);
