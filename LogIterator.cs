@@ -23,23 +23,23 @@ class LogIterator : IEnumerable<byte[]>, IEnumerator<byte[]>
         _boundary = _p.GetInt(0);
         _currentPos = _boundary;
     }
-    public byte[] Current {get; private set;} = Array.Empty<byte>();
+    public byte[] Current { get; private set; } = Array.Empty<byte>();
     object IEnumerator.Current => Current;
     public bool MoveNext()
     {
-        if(_currentPos >= _fm.BlockSize() && _blk.Number() <= 0)
+        if (_currentPos >= _fm.BlockSize() && _blk.Number() <= 0)
             return false;
-        if(_currentPos >= _fm.BlockSize())
+        if (_currentPos >= _fm.BlockSize())
         {
-            _blk = new BlockId(_blk.FileName(), _blk.Number() -1);
+            _blk = new BlockId(_blk.FileName(), _blk.Number() - 1);
             moveToBlock(_blk);
         }
         Current = _p.GetBytes(_currentPos);
         _currentPos += sizeof(int) + Current.Length;
         return true;
     }
-    public void Reset(){}
-    public void Dispose(){}
-    public IEnumerator<byte[]>GetEnumerator() => this; 
+    public void Reset() { }
+    public void Dispose() { }
+    public IEnumerator<byte[]> GetEnumerator() => this;
     IEnumerator IEnumerable.GetEnumerator() => this;
 }

@@ -4,16 +4,16 @@ public class LogMgr
 {
     private FileMgr _fm;
     private string _logfile;
-    private Page _logpage; 
+    private Page _logpage;
     private BlockId _currentblk;
     private int _latestLSN = 0;
     private int _lastSavedLSN = 0;
-    
+
     public LogMgr(FileMgr fm, string logfile)
     {
         _fm = fm;
         _logfile = logfile;
-        byte[]b = new byte[fm.BlockSize()];
+        byte[] b = new byte[fm.BlockSize()];
         _logpage = new Page(b);
         int logsize = fm.Length(logfile);
         if (logsize == 0)
@@ -22,19 +22,19 @@ public class LogMgr
         }
         else
         {
-            _currentblk = new BlockId(logfile, logsize-1);
+            _currentblk = new BlockId(logfile, logsize - 1);
             fm.Read(_currentblk, _logpage);
         }
     }
     public void Flush(int lsn)
     {
-        if(lsn >= _lastSavedLSN)
+        if (lsn >= _lastSavedLSN)
             flush();
     }
-    public IEnumerable<byte[]>GetEnumerator()
+    public IEnumerable<byte[]> GetEnumerator()
     {
-       flush();
-       return new LogIterator(_fm, _currentblk); 
+        flush();
+        return new LogIterator(_fm, _currentblk);
     }
     public int Append(byte[] logrec)
     {
