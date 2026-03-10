@@ -1,5 +1,3 @@
-using System.Runtime.Intrinsics.X86;
-
 namespace DBSharp;
 
 public class LogMgr
@@ -28,11 +26,26 @@ public class LogMgr
             fm.Read(_currentblk, _logpage);
         }
     }
+    public void Flush(int lsn)
+    {
+        if(lsn >= _lastSavedLSN)
+            flush();
+    }
+    public IEnumerable<byte[]>GetEnumerator()
+    {
+       flush();
+       return new LogIterator(_fm, _currentblk); 
+    }
     private BlockId appendNewBlock()
     {
         BlockId blk = _fm.Append(_logfile);
         _logpage.SetInt(0, _fm.BlockSize());
         _fm.Write(blk, _logpage);
         return blk;
+    }
+    private void flush()
+    {
+        _fm.Write(_currentblk, _logpage);
+        _lastSavedLSN = _latestLSN;
     }
 }
