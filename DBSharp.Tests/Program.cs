@@ -1,4 +1,5 @@
-using DBSharp;
+using DBSharp.File;
+using DBSharp.Log;
 using System.Text;
 
 var tests = new (string Name, Action Body)[]

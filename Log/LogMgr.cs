@@ -1,4 +1,6 @@
-namespace DBSharp;
+namespace DBSharp.Log;
+
+using DBSharp.File;
 
 public class LogMgr
 {

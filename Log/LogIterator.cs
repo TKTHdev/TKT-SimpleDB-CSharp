@@ -1,6 +1,8 @@
 using System.Collections;
 
-using DBSharp;
+using DBSharp.File;
+
+namespace DBSharp.Log;
 
 class LogIterator : IEnumerable<byte[]>, IEnumerator<byte[]>
 {

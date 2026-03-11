@@ -1,4 +1,4 @@
-namespace DBSharp;
+namespace DBSharp.File;
 public class FileMgr
 {
     public class FileMgrStatistics
@@ -31,7 +31,7 @@ public class FileMgr
             _dbDirectory.Create();
         foreach (string filename in Directory.GetFiles(_dbDirectory.FullName))
             if (Path.GetFileName(filename).StartsWith("temp"))
-                File.Delete(filename);
+                System.IO.File.Delete(filename);
     }
     public void Read(BlockId blk, Page p)
     {

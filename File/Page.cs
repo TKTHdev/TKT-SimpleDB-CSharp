@@ -1,4 +1,4 @@
-namespace DBSharp;
+namespace DBSharp.File;
 
 using System.Text;
 

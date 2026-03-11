@@ -1,4 +1,4 @@
-namespace DBSharp;
+namespace DBSharp.File;
 public class BlockId
 {
     private string _filename;
