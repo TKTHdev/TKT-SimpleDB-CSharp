@@ -1,0 +1,2 @@
+namespace DBSharp.Buffer;
+
