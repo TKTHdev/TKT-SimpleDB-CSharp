@@ -31,8 +31,8 @@ public class Buffer
 
     public void SetModified(int txnum, int lsn)
     {
-       _txnum = txnum;
-       if(_lsn >= 0 ) _lsn = lsn;
+        _txnum = txnum;
+        if (_lsn >= 0) _lsn = lsn;
     }
 
     public int ModifyingTxn()
