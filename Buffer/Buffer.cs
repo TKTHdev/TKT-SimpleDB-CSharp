@@ -1,6 +1,5 @@
 using DBSharp.File;
 using DBSharp.Log;
-using DBSharp.Buffer;
 
 namespace DBSharp.Buffer;
 
@@ -17,6 +16,7 @@ public class Buffer
     {
         _fm = fm;
         _lm = lm;
+        _contents = new Page(fm.BlockSize());
     }
 
     public Page Contents()
@@ -40,15 +40,15 @@ public class Buffer
         return _txnum;
     }
 
-    void AssignToBlock(BlockId b)
+    public void AssignToBlock(BlockId b)
     {
-        flush();
+        Flush();
         _blk = b;
         _fm.Read(_blk, _contents);
         _pins = 0;
     }
 
-    void flush()
+    public void Flush()
     {
         if (_txnum >= 0)
         {
@@ -58,12 +58,12 @@ public class Buffer
         }
     }
 
-    void Pin()
+    public void Pin()
     {
         _pins++;
     }
 
-    void Unpin()
+    public void Unpin()
     {
         _pins--;
     }
