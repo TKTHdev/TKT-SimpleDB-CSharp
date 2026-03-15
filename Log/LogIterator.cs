@@ -21,7 +21,7 @@ class LogIterator : IEnumerable<byte[]>, IEnumerator<byte[]>
     }
     private void moveToBlock(BlockId blk)
     {
-        // despite of its name, 
+        // in spite of its name, 
         // it just loads the selected block to the page.
         // that's it.
         _fm.Read(blk, _p);
