@@ -29,9 +29,9 @@ public class Buffer
         return _blk;
     }
 
-    public void SetModified(int txnum, int lsn)
+    public void SetModified(int txNum, int lsn)
     {
-        _txnum = txnum;
+        _txnum = txNum;
         if (_lsn >= 0) _lsn = lsn;
     }
 
