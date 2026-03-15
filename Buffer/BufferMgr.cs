@@ -30,6 +30,8 @@ public class BufferMgr
     {
         lock (this)
         {
+            // flush all the buffer in buffer pool 
+            // with corresponding txn id
             foreach (Buffer buff in _bufferpool)
             {
                 if (buff.ModifyingTxn() == txnum)
@@ -44,6 +46,8 @@ public class BufferMgr
         {
             long timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             Buffer buff = tryToPin(blk);
+            // wait until it can acquire lock
+            // MAX_TIME is the maximum time it waits 
             while (buff == null && !WaitingTooLong(timestamp))
             {
                 Monitor.Wait(this, TimeSpan.FromMilliseconds(MAX_TIME));
@@ -58,20 +62,32 @@ public class BufferMgr
 
     private Buffer? tryToPin(BlockId blk)
     {
-        Buffer buff = FindExistingBuffer(blk);
+        // try finding selected block in buffer pool
+        // it might or might not be pinned
+        Buffer? buff = FindExistingBuffer(blk);
+        // if it cannot find the block in buffer pool
+        // then search for unpinned buffer to evict
         if (buff == null)
         {
+            // find unpinned buffer
             buff = ChooseUnpinnedBuffer();
             if (buff == null)
                 return null;
+            // replace with new block 
             buff.AssignToBlock(blk);
         }
-
+        // when it is newly pinned block
         if (buff.IsPinned() == false)
             _numAvailable--;
         buff.Pin();
         return buff;
 
+    }
+
+    private bool WaitingTooLong(long starttime)
+    {
+        long now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        return now - starttime > MAX_TIME;
     }
 
     private Buffer? FindExistingBuffer(BlockId blk)
@@ -103,7 +119,8 @@ public class BufferMgr
             if (buff.IsPinned() == false)
             {
                 _numAvailable++;
-                NotifyAll();
+                // notify all the threads waiting with Monitor.Wait
+                Monitor.PulseAll(this);
             }
         }
     }
