@@ -1,3 +1,4 @@
+using DBSharp.Buffer;
 using DBSharp.File;
 using DBSharp.Log;
 using System.Text;
@@ -18,6 +19,13 @@ var tests = new (string Name, Action Body)[]
     ("FileMgr length tracks the highest written block", FileMgr_LengthTracksWrittenBlocks),
     ("FileMgr keeps file lengths isolated per file", FileMgr_LengthIsPerFile),
     ("LogMgr creates records and iterates in reverse", LogMgr_CreateAndIterate),
+    ("BufferMgr available starts at pool size", BufferMgr_AvailableStartsAtPoolSize),
+    ("BufferMgr pin decreases available", BufferMgr_PinDecreasesAvailable),
+    ("BufferMgr unpin increases available", BufferMgr_UnpinIncreasesAvailable),
+    ("BufferMgr pinning same block twice does not double-decrement available", BufferMgr_PinSameBlockNoDoubleDec),
+    ("BufferMgr pin all buffers then pin another throws BufferAbortException", BufferMgr_PinExhaustedThrows),
+    ("BufferMgr pinned buffer returns correct block", BufferMgr_PinnedBufferReturnsBlock),
+    ("BufferMgr unpin then re-pin reuses buffer from pool", BufferMgr_UnpinThenRePinReuses),
 };
 
 var failures = new List<string>();
@@ -266,6 +274,120 @@ static byte[] CreateLogRecord(string s, int n)
     p.SetString(0, s);
     p.SetInt(npos, n);
     return b;
+}
+
+static (FileMgr fm, LogMgr lm) CreateBufferTestDeps()
+{
+    var dbPath = CreateDirectory();
+    var fm = new FileMgr(new DirectoryInfo(dbPath), 400);
+    var lm = new LogMgr(fm, "simpledb.log");
+    return (fm, lm);
+}
+
+static void BufferMgr_AvailableStartsAtPoolSize()
+{
+    var (fm, lm) = CreateBufferTestDeps();
+    var bm = new BufferMgr(fm, lm, 3);
+
+    Assert.Equal(3, bm.Available());
+}
+
+static void BufferMgr_PinDecreasesAvailable()
+{
+    var (fm, lm) = CreateBufferTestDeps();
+    var bm = new BufferMgr(fm, lm, 3);
+
+    // need a block on disk
+    fm.Append("test.tbl");
+    bm.Pin(new BlockId("test.tbl", 0));
+
+    Assert.Equal(2, bm.Available());
+}
+
+static void BufferMgr_UnpinIncreasesAvailable()
+{
+    var (fm, lm) = CreateBufferTestDeps();
+    var bm = new BufferMgr(fm, lm, 3);
+
+    fm.Append("test.tbl");
+    var buff = bm.Pin(new BlockId("test.tbl", 0));
+    bm.Unpin(buff);
+
+    Assert.Equal(3, bm.Available());
+}
+
+static void BufferMgr_PinSameBlockNoDoubleDec()
+{
+    var (fm, lm) = CreateBufferTestDeps();
+    var bm = new BufferMgr(fm, lm, 3);
+
+    fm.Append("test.tbl");
+    var blk = new BlockId("test.tbl", 0);
+    bm.Pin(blk);
+    bm.Pin(blk); // same block, already pinned
+
+    // should only have decreased by 1, not 2
+    Assert.Equal(2, bm.Available());
+}
+
+static void BufferMgr_PinExhaustedThrows()
+{
+    var (fm, lm) = CreateBufferTestDeps();
+    var bm = new BufferMgr(fm, lm, 2);
+
+    fm.Append("test.tbl");
+    fm.Append("test.tbl");
+    fm.Append("test.tbl");
+
+    bm.Pin(new BlockId("test.tbl", 0));
+    bm.Pin(new BlockId("test.tbl", 1));
+
+    bool threw = false;
+    try
+    {
+        bm.Pin(new BlockId("test.tbl", 2));
+    }
+    catch (BufferAbortException)
+    {
+        threw = true;
+    }
+    Assert.True(threw, "Expected BufferAbortException when all buffers are pinned.");
+}
+
+static void BufferMgr_PinnedBufferReturnsBlock()
+{
+    var (fm, lm) = CreateBufferTestDeps();
+    var bm = new BufferMgr(fm, lm, 3);
+
+    fm.Append("test.tbl");
+    var blk = new BlockId("test.tbl", 0);
+    var buff = bm.Pin(blk);
+
+    Assert.True(buff.Block().Equals(blk), "Pinned buffer should reference the requested block.");
+}
+
+static void BufferMgr_UnpinThenRePinReuses()
+{
+    var (fm, lm) = CreateBufferTestDeps();
+    var bm = new BufferMgr(fm, lm, 1);
+
+    fm.Append("test.tbl");
+    fm.Append("test.tbl");
+
+    // pin block 0, write data, unpin
+    var blk0 = new BlockId("test.tbl", 0);
+    var buff0 = bm.Pin(blk0);
+    buff0.Contents().SetInt(0, 42);
+    buff0.SetModified(1, 0);
+    bm.Unpin(buff0);
+
+    // pin block 1 (evicts block 0)
+    var buff1 = bm.Pin(new BlockId("test.tbl", 1));
+    bm.Unpin(buff1);
+
+    // re-pin block 0 — should read back from disk
+    var buff0Again = bm.Pin(blk0);
+    Assert.Equal(42, buff0Again.Contents().GetInt(0));
 }
 
 static string CreateDirectory()
