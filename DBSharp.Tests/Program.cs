@@ -31,6 +31,9 @@ var tests = new (string Name, Action Body)[]
     ("FIFOBufferMgr uses a free frame before evicting existing blocks", FIFOBufferMgr_UsesFreeFrameBeforeEviction),
     ("FIFOBufferMgr chooses oldest unpinned buffer for eviction", FIFOBufferMgr_EvictsOldestUnpinned),
     ("FIFOBufferMgr does not evict pinned buffer even if it is oldest", FIFOBufferMgr_DoesNotEvictPinnedOldest),
+    ("LRUBufferMgr uses a free frame before evicting existing blocks", LRUBufferMgr_UsesFreeFrameBeforeEviction),
+    ("LRUBufferMgr chooses least recently unpinned buffer for eviction", LRUBufferMgr_EvictsLeastRecentlyUnpinned),
+    ("LRUBufferMgr does not evict pinned buffer even if it is least recently unpinned", LRUBufferMgr_DoesNotEvictPinnedLeastRecent),
 };
 
 var failures = new List<string>();
@@ -485,6 +488,77 @@ static void FIFOBufferMgr_DoesNotEvictPinnedOldest()
     var b2 = bm.Pin(blk2);
     Assert.True(b0.Block().Equals(blk0), "Pinned oldest block should not be evicted.");
     Assert.True(b2.Block().Equals(blk2), "Newly pinned buffer should hold requested block.");
+}
+
+static void LRUBufferMgr_UsesFreeFrameBeforeEviction()
+{
+    var (fm, lm) = CreateBufferTestDeps();
+    var bm = new LRUBufferMgr(fm, lm, 2);
+
+    fm.Append("test.tbl");
+    fm.Append("test.tbl");
+
+    var blk0 = new BlockId("test.tbl", 0);
+    var blk1 = new BlockId("test.tbl", 1);
+
+    var b0 = bm.Pin(blk0);
+    bm.Unpin(b0);
+
+    // One frame is still never used; second block should consume that frame.
+    var b1 = bm.Pin(blk1);
+    Assert.False(object.ReferenceEquals(b0, b1), "Second distinct block should use a different free frame.");
+
+    var b0Again = bm.Pin(blk0);
+    Assert.True(object.ReferenceEquals(b0Again, b0), "Original block should stay resident while a free frame exists.");
+}
+
+static void LRUBufferMgr_EvictsLeastRecentlyUnpinned()
+{
+    var (fm, lm) = CreateBufferTestDeps();
+    var bm = new LRUBufferMgr(fm, lm, 2);
+
+    fm.Append("test.tbl");
+    fm.Append("test.tbl");
+    fm.Append("test.tbl");
+
+    var blk0 = new BlockId("test.tbl", 0);
+    var blk1 = new BlockId("test.tbl", 1);
+    var blk2 = new BlockId("test.tbl", 2);
+
+    var b0 = bm.Pin(blk0);
+    var b1 = bm.Pin(blk1);
+    bm.Unpin(b0); // older unpin
+    bm.Unpin(b1); // more recent unpin
+
+    // LRU should evict block 0 because it was unpinned less recently than block 1.
+    var b2 = bm.Pin(blk2);
+
+    Assert.True(object.ReferenceEquals(b0, b2), "LRU should reuse the least recently unpinned frame.");
+    Assert.True(b0.Block().Equals(blk2), "Evicted frame should now hold the requested block.");
+    Assert.True(b1.Block().Equals(blk1), "More recently unpinned frame should remain untouched.");
+}
+
+static void LRUBufferMgr_DoesNotEvictPinnedLeastRecent()
+{
+    var (fm, lm) = CreateBufferTestDeps();
+    var bm = new LRUBufferMgr(fm, lm, 2);
+
+    fm.Append("test.tbl");
+    fm.Append("test.tbl");
+    fm.Append("test.tbl");
+
+    var blk0 = new BlockId("test.tbl", 0);
+    var blk1 = new BlockId("test.tbl", 1);
+    var blk2 = new BlockId("test.tbl", 2);
+
+    var b0 = bm.Pin(blk0); // keep pinned
+    var b1 = bm.Pin(blk1);
+    bm.Unpin(b1);          // only block 1 is evictable
+
+    var b2 = bm.Pin(blk2);
+    Assert.True(b0.Block().Equals(blk0), "Pinned block should not be evicted.");
+    Assert.True(object.ReferenceEquals(b1, b2), "LRU should reuse the only unpinned frame.");
+    Assert.True(b2.Block().Equals(blk2), "Reused frame should hold requested block.");
 }
 
 static string CreateDirectory()

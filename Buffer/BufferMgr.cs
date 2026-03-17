@@ -384,14 +384,31 @@ public class LRUBufferMgr
         return null;
     }
 
+    
     private Buffer? ChooseUnpinnedBuffer()
     {
-        foreach (Buffer buff in _bufferpool)
+        // First, consume truly free frames before evicting existing blocks.
+        for (int i = 0; i < _bufferpool.Length; i++)
         {
-            if (buff.IsPinned() == false)
-                return buff;
+            if (!_bufferpool[i].IsPinned() && _bufferpool[i].Block() == null)
+                return _bufferpool[i];
         }
-        return null;
+
+        // If all frames have been used, pick the oldest loaded unpinned frame (FIFO).
+        int candidate = -1;
+        long oldestTime = long.MaxValue;
+        for (int i = 0; i < _bufferpool.Length; i++)
+        {
+            if (!_bufferpool[i].IsPinned())
+            {
+                if (_seq_unpinned[i] < oldestTime)
+                {
+                    oldestTime = _seq_unpinned[i];
+                    candidate = i;
+                }
+            }
+        }
+        return (candidate >= 0) ? _bufferpool[candidate] : null;
     }
 
     public void Unpin(Buffer buff)
