@@ -199,12 +199,19 @@ public class FIFOBufferMgr
         // then search for unpinned buffer to evict
         if (buff == null)
         {
+            // we need this to know the index of buffer
+            // whose block is replaced 
+            // and whose seq_read_in needs to be updated
+            int buf_index = -1;
             // find unpinned buffer
-            buff = ChooseUnpinnedBuffer();
+            (buff, buf_index) = ChooseUnpinnedBuffer();
             if (buff == null)
                 return null;
             // replace with new block 
             buff.AssignToBlock(blk);
+            // update seq_read_in with incremented seq
+            // because it's block is newly read from disk to buffer
+            _seq_read_in[buf_index] = _seq++;
         }
         // when it is newly pinned block
         if (buff.IsPinned() == false)
@@ -231,14 +238,17 @@ public class FIFOBufferMgr
         return null;
     }
 
-    private Buffer? ChooseUnpinnedBuffer()
+    private (Buffer?,int) ChooseUnpinnedBuffer()
     {
-        foreach (Buffer buff in _bufferpool)
+        for(int i=0;i<_bufferpool.Length;i++)
         {
+            Buffer buff =  _bufferpool[i];
             if (buff.IsPinned() == false)
-                return buff;
+            {
+                return  (buff, i);
+            }
         }
-        return null;
+        return (null, -1);
     }
 
     public void Unpin(Buffer buff)
