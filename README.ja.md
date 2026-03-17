@@ -12,7 +12,7 @@ DBSharp は C#（.NET 8）で実装している、学習目的のデータベー
 
 ## 現在の実装状況
 
-ローカルテスト（21件）で確認済み:
+ローカルテスト（29件）で確認済み:
 
 - `File.BlockId`
   - ブロック識別子（ファイル名 + ブロック番号）、等価性、ハッシュ、文字列表現
@@ -27,10 +27,13 @@ DBSharp は C#（.NET 8）で実装している、学習目的のデータベー
   - ログレコードのページ追記
   - LSN ベースの flush 制御
   - 新しいレコードから古いレコードへの反復
-- `Buffer.Buffer` + `Buffer.BufferMgr`
+- `Buffer.Buffer` + `Buffer.BufferMgr` + `Buffer.FIFOBufferMgr` + `Buffer.LRUBufferMgr`
   - pin/unpin ワークフロー
   - 利用可能バッファ数の管理
-  - unpinned バッファ選択による基本置換
+  - 置換ポリシー:
+    - unpinned バッファ選択による基本置換 (`BufferMgr`)
+    - unpinned フレーム内の FIFO 退避 (`FIFOBufferMgr`)
+    - 最後に unpin されてから最も時間が経ったフレームを退避する LRU (`LRUBufferMgr`)
   - 枯渇時タイムアウトと `BufferAbortException`
 
 ## ディレクトリ構成

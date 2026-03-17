@@ -12,7 +12,7 @@ This repository is not yet a full DBMS. It currently provides core building bloc
 
 ## Status
 
-Implemented and covered by local tests (21 passing cases):
+Implemented and covered by local tests (29 passing cases):
 
 - `File.BlockId`
   - block identity (file name + block number), equality, hash, formatting
@@ -27,10 +27,13 @@ Implemented and covered by local tests (21 passing cases):
   - append log records into block pages
   - flush control with LSN tracking
   - iterate records from newest to oldest
-- `Buffer.Buffer` + `Buffer.BufferMgr`
+- `Buffer.Buffer` + `Buffer.BufferMgr` + `Buffer.FIFOBufferMgr` + `Buffer.LRUBufferMgr`
   - pin/unpin workflow
   - buffer availability accounting
-  - basic replacement by choosing an unpinned buffer
+  - replacement policies:
+    - basic unpinned-buffer selection (`BufferMgr`)
+    - FIFO eviction among unpinned frames (`FIFOBufferMgr`)
+    - LRU eviction by least-recently-unpinned frame (`LRUBufferMgr`)
   - timeout + `BufferAbortException` when exhausted
 
 ## Repository Layout
