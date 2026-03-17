@@ -238,6 +238,14 @@ public class FIFOBufferMgr
 
     private (Buffer?,int) ChooseUnpinnedBuffer()
     {
+        // First, consume truly free frames before evicting existing blocks.
+        for (int i = 0; i < _bufferpool.Length; i++)
+        {
+            if (!_bufferpool[i].IsPinned() && _bufferpool[i].Block() == null)
+                return (_bufferpool[i], i);
+        }
+
+        // If all frames have been used, pick the oldest loaded unpinned frame (FIFO).
         int candidate = -1;
         long oldestTime = long.MaxValue;
         for (int i = 0; i < _bufferpool.Length; i++)

@@ -26,6 +26,11 @@ var tests = new (string Name, Action Body)[]
     ("BufferMgr pin all buffers then pin another throws BufferAbortException", BufferMgr_PinExhaustedThrows),
     ("BufferMgr pinned buffer returns correct block", BufferMgr_PinnedBufferReturnsBlock),
     ("BufferMgr unpin then re-pin reuses buffer from pool", BufferMgr_UnpinThenRePinReuses),
+    ("FIFOBufferMgr available starts at pool size", FIFOBufferMgr_AvailableStartsAtPoolSize),
+    ("FIFOBufferMgr pinning same block twice does not double-decrement available", FIFOBufferMgr_PinSameBlockNoDoubleDec),
+    ("FIFOBufferMgr uses a free frame before evicting existing blocks", FIFOBufferMgr_UsesFreeFrameBeforeEviction),
+    ("FIFOBufferMgr chooses oldest unpinned buffer for eviction", FIFOBufferMgr_EvictsOldestUnpinned),
+    ("FIFOBufferMgr does not evict pinned buffer even if it is oldest", FIFOBufferMgr_DoesNotEvictPinnedOldest),
 };
 
 var failures = new List<string>();
@@ -388,6 +393,98 @@ static void BufferMgr_UnpinThenRePinReuses()
     // re-pin block 0 — should read back from disk
     var buff0Again = bm.Pin(blk0);
     Assert.Equal(42, buff0Again.Contents().GetInt(0));
+}
+
+static void FIFOBufferMgr_AvailableStartsAtPoolSize()
+{
+    var (fm, lm) = CreateBufferTestDeps();
+    var bm = new FIFOBufferMgr(fm, lm, 3);
+
+    Assert.Equal(3, bm.Available());
+}
+
+static void FIFOBufferMgr_PinSameBlockNoDoubleDec()
+{
+    var (fm, lm) = CreateBufferTestDeps();
+    var bm = new FIFOBufferMgr(fm, lm, 3);
+
+    fm.Append("test.tbl");
+    var blk = new BlockId("test.tbl", 0);
+    bm.Pin(blk);
+    bm.Pin(blk);
+
+    Assert.Equal(2, bm.Available());
+}
+
+static void FIFOBufferMgr_EvictsOldestUnpinned()
+{
+    var (fm, lm) = CreateBufferTestDeps();
+    var bm = new FIFOBufferMgr(fm, lm, 2);
+
+    fm.Append("test.tbl");
+    fm.Append("test.tbl");
+    fm.Append("test.tbl");
+
+    var blk0 = new BlockId("test.tbl", 0);
+    var blk1 = new BlockId("test.tbl", 1);
+    var blk2 = new BlockId("test.tbl", 2);
+
+    var b0 = bm.Pin(blk0);
+    var b1 = bm.Pin(blk1);
+    bm.Unpin(b0);
+    bm.Unpin(b1);
+
+    // Both buffers are unpinned; FIFO should evict block 0 first.
+    var b2 = bm.Pin(blk2);
+
+    // FIFO should reuse the frame that previously held blk0 (older than blk1).
+    Assert.True(object.ReferenceEquals(b0, b2), "FIFO should evict/reuse the oldest frame first.");
+    Assert.True(b0.Block().Equals(blk2), "Oldest frame should now contain the new block.");
+    Assert.True(b1.Block().Equals(blk1), "Newer frame should remain untouched.");
+}
+
+static void FIFOBufferMgr_UsesFreeFrameBeforeEviction()
+{
+    var (fm, lm) = CreateBufferTestDeps();
+    var bm = new FIFOBufferMgr(fm, lm, 2);
+
+    fm.Append("test.tbl");
+    fm.Append("test.tbl");
+
+    var blk0 = new BlockId("test.tbl", 0);
+    var blk1 = new BlockId("test.tbl", 1);
+
+    var b0 = bm.Pin(blk0);
+    bm.Unpin(b0);
+
+    // There is still one never-used frame; blk0 should remain resident.
+    var b1 = bm.Pin(blk1);
+    Assert.False(object.ReferenceEquals(b0, b1), "Second distinct block should use a different free frame.");
+
+    var b0Again = bm.Pin(blk0);
+    Assert.True(object.ReferenceEquals(b0Again, b0), "Original block should still be resident when a free frame existed.");
+}
+
+static void FIFOBufferMgr_DoesNotEvictPinnedOldest()
+{
+    var (fm, lm) = CreateBufferTestDeps();
+    var bm = new FIFOBufferMgr(fm, lm, 2);
+
+    fm.Append("test.tbl");
+    fm.Append("test.tbl");
+    fm.Append("test.tbl");
+
+    var blk0 = new BlockId("test.tbl", 0);
+    var blk1 = new BlockId("test.tbl", 1);
+    var blk2 = new BlockId("test.tbl", 2);
+
+    var b0 = bm.Pin(blk0); // oldest, kept pinned
+    var b1 = bm.Pin(blk1);
+    bm.Unpin(b1);          // only block 1 is evictable
+
+    var b2 = bm.Pin(blk2);
+    Assert.True(b0.Block().Equals(blk0), "Pinned oldest block should not be evicted.");
+    Assert.True(b2.Block().Equals(blk2), "Newly pinned buffer should hold requested block.");
 }
 
 static string CreateDirectory()
