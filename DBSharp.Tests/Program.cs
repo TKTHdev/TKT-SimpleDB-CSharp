@@ -37,6 +37,8 @@ var tests = new (string Name, Action Body)[]
     ("ClockBufferMgr uses a free frame before evicting existing blocks", ClockBufferMgr_UsesFreeFrameBeforeEviction),
     ("ClockBufferMgr starts scan after previous replacement", ClockBufferMgr_StartsScanAfterPreviousReplacement),
     ("ClockBufferMgr does not evict pinned frame", ClockBufferMgr_DoesNotEvictPinnedFrame),
+    ("CleanFirstBufferMgr prefers clean unpinned frames", CleanFirstBufferMgr_PrefersCleanUnpinned),
+    ("CleanFirstBufferMgr falls back to dirty when no clean frame exists", CleanFirstBufferMgr_FallsBackToDirty),
 };
 
 var failures = new List<string>();
@@ -646,6 +648,69 @@ static void ClockBufferMgr_DoesNotEvictPinnedFrame()
     Assert.True(b0.Block().Equals(blk0), "Pinned frame should not be evicted.");
     Assert.True(object.ReferenceEquals(b2, b1), "Clock should reuse the only unpinned frame.");
     Assert.True(b2.Block().Equals(blk2), "Reused frame should hold requested block.");
+}
+
+static void CleanFirstBufferMgr_PrefersCleanUnpinned()
+{
+    var (fm, lm) = CreateBufferTestDeps();
+    var bm = new CleanFirstBufferMgr(fm, lm, 2);
+
+    fm.Append("test.tbl");
+    fm.Append("test.tbl");
+    fm.Append("test.tbl");
+
+    var blk0 = new BlockId("test.tbl", 0);
+    var blk1 = new BlockId("test.tbl", 1);
+    var blk2 = new BlockId("test.tbl", 2);
+
+    var b0 = bm.Pin(blk0);
+    var b1 = bm.Pin(blk1);
+
+    // Make block 0 dirty, keep block 1 clean.
+    b0.Contents().SetInt(0, 123);
+    b0.SetModified(1, -1);
+
+    bm.Unpin(b0);
+    bm.Unpin(b1);
+
+    // Replacement should prefer clean frame b1.
+    var b2 = bm.Pin(blk2);
+
+    Assert.True(object.ReferenceEquals(b2, b1), "Should evict clean frame before dirty frame.");
+    Assert.True(b0.Block().Equals(blk0), "Dirty frame should remain resident when clean victim exists.");
+}
+
+static void CleanFirstBufferMgr_FallsBackToDirty()
+{
+    var (fm, lm) = CreateBufferTestDeps();
+    var bm = new CleanFirstBufferMgr(fm, lm, 2);
+
+    fm.Append("test.tbl");
+    fm.Append("test.tbl");
+    fm.Append("test.tbl");
+
+    var blk0 = new BlockId("test.tbl", 0);
+    var blk1 = new BlockId("test.tbl", 1);
+    var blk2 = new BlockId("test.tbl", 2);
+
+    var b0 = bm.Pin(blk0);
+    var b1 = bm.Pin(blk1);
+
+    // Mark both frames dirty.
+    b0.Contents().SetInt(0, 11);
+    b0.SetModified(1, -1);
+    b1.Contents().SetInt(0, 22);
+    b1.SetModified(1, -1);
+
+    bm.Unpin(b0);
+    bm.Unpin(b1);
+
+    // No clean victim exists, so strategy should still replace an unpinned dirty frame.
+    var b2 = bm.Pin(blk2);
+
+    Assert.True(object.ReferenceEquals(b2, b0) || object.ReferenceEquals(b2, b1),
+        "Should fall back to replacing an unpinned dirty frame when no clean frame exists.");
+    Assert.True(b2.Block().Equals(blk2), "Chosen victim should now hold requested block.");
 }
 
 static string CreateDirectory()
