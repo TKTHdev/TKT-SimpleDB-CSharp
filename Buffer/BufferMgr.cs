@@ -129,6 +129,7 @@ public class FIFOBufferMgr
 {
     private Buffer[] _bufferpool;
     // sequence number of each time the buffer was read in 
+    // updated inside ChooseUnpinnedBuffer
     private long[] _seq_read_in;
     // this is incremented everytime it reads a block from disk to buffer
     private long _seq;
@@ -199,12 +200,16 @@ public class FIFOBufferMgr
         // then search for unpinned buffer to evict
         if (buff == null)
         {
+            // we need this later 
+            // to update _seq_read_in[] 
+            int bufindex = -1;
             // find unpinned buffer
-            buff = ChooseUnpinnedBuffer();
+            (buff, bufindex) = ChooseUnpinnedBuffer();
             if (buff == null)
                 return null;
             // replace with new block 
             buff.AssignToBlock(blk);
+            _seq_read_in[bufindex] = _seq++;
         }
         // when it is newly pinned block
         if (buff.IsPinned() == false)
@@ -231,7 +236,7 @@ public class FIFOBufferMgr
         return null;
     }
 
-    private Buffer? ChooseUnpinnedBuffer()
+    private (Buffer?,int) ChooseUnpinnedBuffer()
     {
         int candidate = -1;
         long oldestTime = long.MaxValue;
@@ -246,8 +251,7 @@ public class FIFOBufferMgr
                 }
             }
         }
-
-        return (candidate >= 0) ? _bufferpool[candidate] : null;
+        return (candidate >= 0) ? (_bufferpool[candidate], candidate) : (null,-1);
     }
 
     public void Unpin(Buffer buff)
