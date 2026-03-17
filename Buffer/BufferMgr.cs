@@ -129,16 +129,16 @@ public class FIFOBufferMgr
 {
     private Buffer[] _bufferpool;
     // sequence number of each time the buffer was read in 
-    private int[] _seq_read_in;
+    private long[] _seq_read_in;
     // this is incremented everytime it reads a block from disk to buffer
-    private int _seq;
+    private long _seq;
     private int _numAvailable;
     private static  readonly long MAX_TIME = 10000;//10 seconds
 
     public FIFOBufferMgr(FileMgr fm, LogMgr lm, int numbuffs)
     {
         _bufferpool = new Buffer[numbuffs];
-        _seq_read_in = new int[numbuffs]; 
+        _seq_read_in = new long[numbuffs]; 
         // when initialized, all buffers are available
         _numAvailable = numbuffs;
         for (int i = 0; i < numbuffs; i++)
@@ -199,19 +199,12 @@ public class FIFOBufferMgr
         // then search for unpinned buffer to evict
         if (buff == null)
         {
-            // we need this to know the index of buffer
-            // whose block is replaced 
-            // and whose seq_read_in needs to be updated
-            int buf_index = -1;
             // find unpinned buffer
-            (buff, buf_index) = ChooseUnpinnedBuffer();
+            buff = ChooseUnpinnedBuffer();
             if (buff == null)
                 return null;
             // replace with new block 
             buff.AssignToBlock(blk);
-            // update seq_read_in with incremented seq
-            // because it's block is newly read from disk to buffer
-            _seq_read_in[buf_index] = _seq++;
         }
         // when it is newly pinned block
         if (buff.IsPinned() == false)
@@ -238,17 +231,23 @@ public class FIFOBufferMgr
         return null;
     }
 
-    private (Buffer?,int) ChooseUnpinnedBuffer()
+    private Buffer? ChooseUnpinnedBuffer()
     {
-        for(int i=0;i<_bufferpool.Length;i++)
+        int candidate = -1;
+        long oldestTime = long.MaxValue;
+        for (int i = 0; i < _bufferpool.Length; i++)
         {
-            Buffer buff =  _bufferpool[i];
-            if (buff.IsPinned() == false)
+            if (!_bufferpool[i].IsPinned())
             {
-                return  (buff, i);
+                if (_seq_read_in[i] < oldestTime)
+                {
+                    oldestTime = _seq_read_in[i];
+                    candidate = i;
+                }
             }
         }
-        return (null, -1);
+
+        return (candidate >= 0) ? _bufferpool[candidate] : null;
     }
 
     public void Unpin(Buffer buff)
