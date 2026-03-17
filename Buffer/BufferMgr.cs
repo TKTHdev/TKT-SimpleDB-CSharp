@@ -73,7 +73,9 @@ public class BufferMgr
             buff = ChooseUnpinnedBuffer();
             if (buff == null)
                 return null;
-            // replace with new block 
+            // replace with new block.
+            // AssignToBlock always calls Flush(), but actual write-back happens
+            // only when the current buffer is dirty (txnum >= 0).
             buff.AssignToBlock(blk);
         }
         // when it is newly pinned block
@@ -208,7 +210,9 @@ public class FIFOBufferMgr
             (buff, bufindex) = ChooseUnpinnedBuffer();
             if (buff == null)
                 return null;
-            // replace with new block 
+            // replace with new block.
+            // AssignToBlock always calls Flush(), but actual write-back happens
+            // only when the current buffer is dirty (txnum >= 0).
             buff.AssignToBlock(blk);
             _seq_read_in[bufindex] = ++_seq;
         }
@@ -356,7 +360,9 @@ public class LRUBufferMgr
             buff = ChooseUnpinnedBuffer();
             if (buff == null)
                 return null;
-            // replace with new block 
+            // replace with new block.
+            // AssignToBlock always calls Flush(), but actual write-back happens
+            // only when the current buffer is dirty (txnum >= 0).
             buff.AssignToBlock(blk);
         }
         // when it is newly pinned block
@@ -506,7 +512,9 @@ public class ClockBufferMgr
             buff = ChooseUnpinnedBuffer();
             if (buff == null)
                 return null;
-            // replace with new block 
+            // replace with new block.
+            // AssignToBlock always calls Flush(), but actual write-back happens
+            // only when the current buffer is dirty (txnum >= 0).
             buff.AssignToBlock(blk);
         }
         // when it is newly pinned block
