@@ -434,3 +434,132 @@ public class LRUBufferMgr
         }
     }
 }
+
+public class ClockBufferMgr
+{
+    private Buffer[] _bufferpool;
+    private int _numAvailable;
+    private static  readonly long MAX_TIME = 10000;//10 seconds
+    private int _clock = 0;
+
+    public ClockBufferMgr(FileMgr fm, LogMgr lm, int numbuffs)
+    {
+        _bufferpool = new Buffer[numbuffs];
+        // when initialized, all buffers are available
+        _numAvailable = numbuffs;
+        for(int i=0;i<numbuffs;i++)
+            _bufferpool[i] = new Buffer(fm, lm);
+    }
+
+    public int Available()
+    {
+        lock (this)
+        {
+            return _numAvailable;
+        }
+    }
+
+    public void FlushAll(int txnum)
+    {
+        lock (this)
+        {
+            // flush all the buffer in buffer pool 
+            // with corresponding txn id
+            foreach (Buffer buff in _bufferpool)
+            {
+                if (buff.ModifyingTxn() == txnum)
+                    buff.Flush();
+            }
+        }
+    }
+
+    public Buffer Pin(BlockId blk)
+    {
+        lock (this)
+        {
+            long timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            Buffer buff = tryToPin(blk);
+            // wait until it can acquire lock
+            // MAX_TIME is the maximum time it waits 
+            while (buff == null && !WaitingTooLong(timestamp))
+            {
+                Monitor.Wait(this, TimeSpan.FromMilliseconds(MAX_TIME));
+                buff = tryToPin(blk);
+            }
+
+            if (buff == null)
+                throw new BufferAbortException();
+            return buff;
+        }
+    }
+
+    private Buffer? tryToPin(BlockId blk)
+    {
+        // try finding selected block in buffer pool
+        // it might or might not be pinned
+        Buffer? buff = FindExistingBuffer(blk);
+        // if it cannot find the block in buffer pool
+        // then search for unpinned buffer to evict
+        if (buff == null)
+        {
+            // find unpinned buffer
+            buff = ChooseUnpinnedBuffer();
+            if (buff == null)
+                return null;
+            // replace with new block 
+            buff.AssignToBlock(blk);
+        }
+        // when it is newly pinned block
+        if (buff.IsPinned() == false)
+            _numAvailable--;
+        buff.Pin();
+        return buff;
+
+    }
+
+    private bool WaitingTooLong(long starttime)
+    {
+        long now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        return now - starttime > MAX_TIME;
+    }
+
+    private Buffer? FindExistingBuffer(BlockId blk)
+    {
+        foreach (Buffer buff in _bufferpool)
+        {
+            BlockId b = buff.Block();
+            if (b != null && b.Equals(blk))
+                return buff;
+        }
+        return null;
+    }
+
+    private Buffer? ChooseUnpinnedBuffer()
+    {
+        for(int offset = 0; offset<_bufferpool.Length; offset++)
+        {
+            int idx = (_clock + offset) % _bufferpool.Length;
+            Buffer buff = _bufferpool[idx];
+            if (buff.IsPinned() == false)
+            {
+                _clock = (idx + 1) % _bufferpool.Length;
+                return buff;
+            }
+        }
+        return null;
+    }
+
+    public void Unpin(Buffer buff)
+    {
+        lock (this)
+        {
+            buff.Unpin();
+            if (buff.IsPinned() == false)
+            {
+                _numAvailable++;
+                // notify all the threads waiting with Monitor.Wait
+                Monitor.PulseAll(this);
+            }
+        }
+    }
+}

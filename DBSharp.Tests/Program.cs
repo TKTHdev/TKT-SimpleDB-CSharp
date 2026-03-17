@@ -34,6 +34,9 @@ var tests = new (string Name, Action Body)[]
     ("LRUBufferMgr uses a free frame before evicting existing blocks", LRUBufferMgr_UsesFreeFrameBeforeEviction),
     ("LRUBufferMgr chooses least recently unpinned buffer for eviction", LRUBufferMgr_EvictsLeastRecentlyUnpinned),
     ("LRUBufferMgr does not evict pinned buffer even if it is least recently unpinned", LRUBufferMgr_DoesNotEvictPinnedLeastRecent),
+    ("ClockBufferMgr uses a free frame before evicting existing blocks", ClockBufferMgr_UsesFreeFrameBeforeEviction),
+    ("ClockBufferMgr starts scan after previous replacement", ClockBufferMgr_StartsScanAfterPreviousReplacement),
+    ("ClockBufferMgr does not evict pinned frame", ClockBufferMgr_DoesNotEvictPinnedFrame),
 };
 
 var failures = new List<string>();
@@ -558,6 +561,90 @@ static void LRUBufferMgr_DoesNotEvictPinnedLeastRecent()
     var b2 = bm.Pin(blk2);
     Assert.True(b0.Block().Equals(blk0), "Pinned block should not be evicted.");
     Assert.True(object.ReferenceEquals(b1, b2), "LRU should reuse the only unpinned frame.");
+    Assert.True(b2.Block().Equals(blk2), "Reused frame should hold requested block.");
+}
+
+static void ClockBufferMgr_UsesFreeFrameBeforeEviction()
+{
+    var (fm, lm) = CreateBufferTestDeps();
+    var bm = new ClockBufferMgr(fm, lm, 2);
+
+    fm.Append("test.tbl");
+    fm.Append("test.tbl");
+
+    var blk0 = new BlockId("test.tbl", 0);
+    var blk1 = new BlockId("test.tbl", 1);
+
+    var b0 = bm.Pin(blk0);
+    bm.Unpin(b0);
+
+    var b1 = bm.Pin(blk1);
+    Assert.False(object.ReferenceEquals(b0, b1), "Second distinct block should use a different free frame.");
+
+    var b0Again = bm.Pin(blk0);
+    Assert.True(object.ReferenceEquals(b0Again, b0), "Original block should remain resident while a free frame exists.");
+}
+
+static void ClockBufferMgr_StartsScanAfterPreviousReplacement()
+{
+    var (fm, lm) = CreateBufferTestDeps();
+    var bm = new ClockBufferMgr(fm, lm, 4);
+
+    fm.Append("test.tbl");
+    fm.Append("test.tbl");
+    fm.Append("test.tbl");
+    fm.Append("test.tbl");
+    fm.Append("test.tbl");
+    fm.Append("test.tbl");
+
+    var blk0 = new BlockId("test.tbl", 0);
+    var blk1 = new BlockId("test.tbl", 1);
+    var blk2 = new BlockId("test.tbl", 2);
+    var blk3 = new BlockId("test.tbl", 3);
+    var blk4 = new BlockId("test.tbl", 4);
+    var blk5 = new BlockId("test.tbl", 5);
+
+    var b0 = bm.Pin(blk0);
+    var b1 = bm.Pin(blk1);
+    var b2 = bm.Pin(blk2);
+    var b3 = bm.Pin(blk3);
+    bm.Unpin(b0);
+    bm.Unpin(b1);
+    bm.Unpin(b2);
+    bm.Unpin(b3);
+
+    // First replacement takes buffer 0, so clock starts next scan from buffer 1.
+    var b4 = bm.Pin(blk4);
+    bm.Unpin(b4);
+
+    // Next replacement should start after the previous victim and take buffer 1.
+    var b5 = bm.Pin(blk5);
+
+    Assert.True(object.ReferenceEquals(b4, b0), "First replacement should use the first unpinned frame from the hand.");
+    Assert.True(object.ReferenceEquals(b5, b1), "Second replacement should resume scan after the previous victim.");
+    Assert.True(b5.Block().Equals(blk5), "Chosen frame should hold the requested block.");
+}
+
+static void ClockBufferMgr_DoesNotEvictPinnedFrame()
+{
+    var (fm, lm) = CreateBufferTestDeps();
+    var bm = new ClockBufferMgr(fm, lm, 2);
+
+    fm.Append("test.tbl");
+    fm.Append("test.tbl");
+    fm.Append("test.tbl");
+
+    var blk0 = new BlockId("test.tbl", 0);
+    var blk1 = new BlockId("test.tbl", 1);
+    var blk2 = new BlockId("test.tbl", 2);
+
+    var b0 = bm.Pin(blk0); // keep pinned
+    var b1 = bm.Pin(blk1);
+    bm.Unpin(b1);
+
+    var b2 = bm.Pin(blk2);
+    Assert.True(b0.Block().Equals(blk0), "Pinned frame should not be evicted.");
+    Assert.True(object.ReferenceEquals(b2, b1), "Clock should reuse the only unpinned frame.");
     Assert.True(b2.Block().Equals(blk2), "Reused frame should hold requested block.");
 }
 
