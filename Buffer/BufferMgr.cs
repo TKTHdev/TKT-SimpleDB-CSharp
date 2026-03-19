@@ -852,9 +852,10 @@ public class LSNBasedBufferMgr
 
 public class BufferMgrWithBufferHashTable
 {
-     private Buffer[] _bufferpool;
+    private Buffer[] _bufferpool;
     private int _numAvailable;
     private static  readonly long MAX_TIME = 10000;//10 seconds
+    private Dictionary<BlockId, Buffer> _hashtable = new Dictionary<BlockId, Buffer>();
 
     public BufferMgrWithBufferHashTable(FileMgr fm, LogMgr lm, int numbuffs)
     {
@@ -923,7 +924,11 @@ public class BufferMgrWithBufferHashTable
             // replace with new block.
             // AssignToBlock always calls Flush(), but actual write-back happens
             // only when the current buffer is dirty (txnum >= 0).
+            BlockId oldBlk = blk;
+            if (oldBlk != null)
+                _hashtable.Remove(oldBlk);
             buff.AssignToBlock(blk);
+            _hashtable.Add(blk, buff);
         }
         // when it is newly pinned block
         if (buff.IsPinned() == false)
@@ -941,11 +946,20 @@ public class BufferMgrWithBufferHashTable
 
     private Buffer? FindExistingBuffer(BlockId blk)
     {
+        if (_hashtable.ContainsKey(blk))
+        {
+            Buffer buff  = _hashtable[blk];
+            return buff;
+        }
+
         foreach (Buffer buff in _bufferpool)
         {
             BlockId b = buff.Block();
             if (b != null && b.Equals(blk))
+            {
+                _hashtable.Add(blk, buff);    
                 return buff;
+            }
         }
         return null;
     }
