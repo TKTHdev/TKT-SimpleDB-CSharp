@@ -26,6 +26,9 @@ var tests = new (string Name, Action Body)[]
     ("BufferMgr pin all buffers then pin another throws BufferAbortException", BufferMgr_PinExhaustedThrows),
     ("BufferMgr pinned buffer returns correct block", BufferMgr_PinnedBufferReturnsBlock),
     ("BufferMgr unpin then re-pin reuses buffer from pool", BufferMgr_UnpinThenRePinReuses),
+    ("BufferMgrWithBufferHashTable available starts at pool size", BufferMgrWithBufferHashTable_AvailableStartsAtPoolSize),
+    ("BufferMgrWithBufferHashTable pinning same block twice does not double-decrement available", BufferMgrWithBufferHashTable_PinSameBlockNoDoubleDec),
+    ("BufferMgrWithBufferHashTable eviction keeps hash table mapping consistent", BufferMgrWithBufferHashTable_EvictionMaintainsCorrectMapping),
     ("FIFOBufferMgr available starts at pool size", FIFOBufferMgr_AvailableStartsAtPoolSize),
     ("FIFOBufferMgr pinning same block twice does not double-decrement available", FIFOBufferMgr_PinSameBlockNoDoubleDec),
     ("FIFOBufferMgr uses a free frame before evicting existing blocks", FIFOBufferMgr_UsesFreeFrameBeforeEviction),
@@ -401,6 +404,49 @@ static void BufferMgr_UnpinThenRePinReuses()
     // re-pin block 0 — should read back from disk
     var buff0Again = bm.Pin(blk0);
     Assert.Equal(42, buff0Again.Contents().GetInt(0));
+}
+
+static void BufferMgrWithBufferHashTable_AvailableStartsAtPoolSize()
+{
+    var (fm, lm) = CreateBufferTestDeps();
+    var bm = new BufferMgrWithBufferHashTable(fm, lm, 3);
+
+    Assert.Equal(3, bm.Available());
+}
+
+static void BufferMgrWithBufferHashTable_PinSameBlockNoDoubleDec()
+{
+    var (fm, lm) = CreateBufferTestDeps();
+    var bm = new BufferMgrWithBufferHashTable(fm, lm, 3);
+
+    fm.Append("test.tbl");
+    var blk = new BlockId("test.tbl", 0);
+    bm.Pin(blk);
+    bm.Pin(blk);
+
+    Assert.Equal(2, bm.Available());
+}
+
+static void BufferMgrWithBufferHashTable_EvictionMaintainsCorrectMapping()
+{
+    var (fm, lm) = CreateBufferTestDeps();
+    var bm = new BufferMgrWithBufferHashTable(fm, lm, 1);
+
+    fm.Append("test.tbl");
+    fm.Append("test.tbl");
+
+    var blk0 = new BlockId("test.tbl", 0);
+    var blk1 = new BlockId("test.tbl", 1);
+
+    var b0 = bm.Pin(blk0);
+    bm.Unpin(b0);
+
+    var b1 = bm.Pin(blk1);
+    bm.Unpin(b1);
+
+    var b0Again = bm.Pin(blk0);
+    Assert.True(b0Again.Block().Equals(blk0),
+        "Re-pinning block 0 after eviction should return a buffer assigned to block 0.");
 }
 
 static void FIFOBufferMgr_AvailableStartsAtPoolSize()
