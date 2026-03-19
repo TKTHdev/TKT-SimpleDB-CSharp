@@ -72,4 +72,9 @@ public class Buffer
     {
         return _pins > 0;
     }
+
+    public int GetLSN()
+    {
+        return _lsn;
+    }
 }

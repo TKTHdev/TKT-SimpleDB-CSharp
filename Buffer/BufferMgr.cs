@@ -572,6 +572,8 @@ public class ClockBufferMgr
     }
 }
 
+// buffer manager with a page replacement strategy
+// that chooses unmodified pages over modified ones.
 public class CleanFirstBufferMgr
 {
     private Buffer[] _bufferpool;
@@ -687,6 +689,150 @@ public class CleanFirstBufferMgr
                 return buff;
         }
         return null;
+    }
+
+    public void Unpin(Buffer buff)
+    {
+        lock (this)
+        {
+            buff.Unpin();
+            if (buff.IsPinned() == false)
+            {
+                _numAvailable++;
+                // notify all the threads waiting with Monitor.Wait
+                Monitor.PulseAll(this);
+            }
+        }
+    }
+}
+
+// buffer manager with a page replacement strategy
+// that chooses the modified page having the lowest LSN
+public class LSNBasedBufferMgr
+{
+    private Buffer[] _bufferpool;
+    private int _numAvailable;
+    private static  readonly long MAX_TIME = 10000;//10 seconds
+
+    public LSNBasedBufferMgr(FileMgr fm, LogMgr lm, int numbuffs)
+    {
+        _bufferpool = new Buffer[numbuffs];
+        // when initialized, all buffers are available
+        _numAvailable = numbuffs;
+        for(int i=0;i<numbuffs;i++)
+            _bufferpool[i] = new Buffer(fm, lm);
+    }
+
+    public int Available()
+    {
+        lock (this)
+        {
+            return _numAvailable;
+        }
+    }
+
+    public void FlushAll(int txnum)
+    {
+        lock (this)
+        {
+            // flush all the buffer in buffer pool 
+            // with corresponding txn id
+            foreach (Buffer buff in _bufferpool)
+            {
+                if (buff.ModifyingTxn() == txnum)
+                    buff.Flush();
+            }
+        }
+    }
+
+    public Buffer Pin(BlockId blk)
+    {
+        lock (this)
+        {
+            long timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            Buffer buff = TryToPin(blk);
+            // wait until it can acquire lock
+            // MAX_TIME is the maximum time it waits 
+            while (buff == null && !WaitingTooLong(timestamp))
+            {
+                Monitor.Wait(this, TimeSpan.FromMilliseconds(MAX_TIME));
+                buff = TryToPin(blk);
+            }
+
+            if (buff == null)
+                throw new BufferAbortException();
+            return buff;
+        }
+    }
+
+    private Buffer? TryToPin(BlockId blk)
+    {
+        // try finding selected block in buffer pool
+        // it might or might not be pinned
+        Buffer? buff = FindExistingBuffer(blk);
+        // if it cannot find the block in buffer pool
+        // then search for unpinned buffer to evict
+        if (buff == null)
+        {
+            // find unpinned buffer
+            buff = ChooseReplacementBuffer();
+            if (buff == null)
+                return null;
+            // replace with new block.
+            // AssignToBlock always calls Flush(), but actual write-back happens
+            // only when the current buffer is dirty (txnum >= 0).
+            buff.AssignToBlock(blk);
+        }
+        // when it is newly pinned block
+        if (buff.IsPinned() == false)
+            _numAvailable--;
+        buff.Pin();
+        return buff;
+
+    }
+
+    private bool WaitingTooLong(long starttime)
+    {
+        long now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        return now - starttime > MAX_TIME;
+    }
+
+    private Buffer? FindExistingBuffer(BlockId blk)
+    {
+        foreach (Buffer buff in _bufferpool)
+        {
+            BlockId b = buff.Block();
+            if (b != null && b.Equals(blk))
+                return buff;
+        }
+        return null;
+    }
+
+    private Buffer? ChooseReplacementBuffer()
+    {
+        foreach (Buffer buff in _bufferpool)
+        {
+            bool isClean = buff.ModifyingTxn() == -1;
+            if (buff.IsPinned() == false && isClean)
+                return buff;
+        }
+        // if no clean frame is found, fall back to any unpinned frame
+        // get the buffer with lowest LSN
+        int lowestLSN = int.MaxValue;
+        Buffer bufWithLowestLSN = null;
+        foreach (Buffer buff in _bufferpool)
+        {
+            // get the buffer with lowest LSN
+            if (buff.IsPinned() == false)
+            {
+                if (buff.GetLSN() < lowestLSN)
+                {
+                    lowestLSN = buff.GetLSN();    
+                    bufWithLowestLSN = buff;
+                }
+            }
+        }
+        return bufWithLowestLSN;
     }
 
     public void Unpin(Buffer buff)
