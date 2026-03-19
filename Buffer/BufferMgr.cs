@@ -924,7 +924,7 @@ public class BufferMgrWithBufferHashTable
             // replace with new block.
             // AssignToBlock always calls Flush(), but actual write-back happens
             // only when the current buffer is dirty (txnum >= 0).
-            BlockId oldBlk = blk;
+            BlockId oldBlk = buff.Block();
             if (oldBlk != null)
                 _hashtable.Remove(oldBlk);
             buff.AssignToBlock(blk);
