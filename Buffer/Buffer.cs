@@ -1,7 +1,7 @@
 using DBSharp.File;
 using DBSharp.Log;
 
-namespace DBSharp.Buffer;
+namespace DBSharp.Buffers;
 
 public class Buffer
 {

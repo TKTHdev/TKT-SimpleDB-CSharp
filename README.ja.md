@@ -78,7 +78,7 @@ dotnet run --project DBSharp.Tests/DBSharp.Tests.csproj
 ```csharp
 using DBSharp.File;
 using DBSharp.Log;
-using DBSharp.Buffer;
+using DBSharp.Buffers;
 
 var fm = new FileMgr(new DirectoryInfo("mydb"), blocksize: 400);
 var lm = new LogMgr(fm, "simpledb.log");
