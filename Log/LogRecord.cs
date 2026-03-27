@@ -1,5 +1,5 @@
 ﻿namespace DBSharp.Log;
-using DBSharp.File; 
+using DBSharp.File;
 
 public interface LogRecord
 {

@@ -7,14 +7,14 @@ public class BufferMgr
 {
     private Buffer[] _bufferpool;
     private int _numAvailable;
-    private static  readonly long MAX_TIME = 10000;//10 seconds
+    private static readonly long MAX_TIME = 10000;//10 seconds
 
     public BufferMgr(FileMgr fm, LogMgr lm, int numbuffs)
     {
         _bufferpool = new Buffer[numbuffs];
         // when initialized, all buffers are available
         _numAvailable = numbuffs;
-        for(int i=0;i<numbuffs;i++)
+        for (int i = 0; i < numbuffs; i++)
             _bufferpool[i] = new Buffer(fm, lm);
     }
 
@@ -136,12 +136,12 @@ public class FIFOBufferMgr
     // this is incremented everytime it reads a block from disk to buffer
     private long _seq;
     private int _numAvailable;
-    private static  readonly long MAX_TIME = 10000;//10 seconds
+    private static readonly long MAX_TIME = 10000;//10 seconds
 
     public FIFOBufferMgr(FileMgr fm, LogMgr lm, int numbuffs)
     {
         _bufferpool = new Buffer[numbuffs];
-        _seq_read_in = new long[numbuffs]; 
+        _seq_read_in = new long[numbuffs];
         // when initialized, all buffers are available
         _numAvailable = numbuffs;
         _seq = 0;
@@ -241,7 +241,7 @@ public class FIFOBufferMgr
         return null;
     }
 
-    private (Buffer?,int) ChooseUnpinnedBuffer()
+    private (Buffer?, int) ChooseUnpinnedBuffer()
     {
         // First, consume truly free frames before evicting existing blocks.
         for (int i = 0; i < _bufferpool.Length; i++)
@@ -264,7 +264,7 @@ public class FIFOBufferMgr
                 }
             }
         }
-        return (candidate >= 0) ? (_bufferpool[candidate], candidate) : (null,-1);
+        return (candidate >= 0) ? (_bufferpool[candidate], candidate) : (null, -1);
     }
 
     public void Unpin(Buffer buff)
@@ -288,7 +288,7 @@ public class LRUBufferMgr
     private long[] _seq_unpinned;
     private long _seq;
     private int _numAvailable;
-    private static  readonly long MAX_TIME = 10000;//10 seconds
+    private static readonly long MAX_TIME = 10000;//10 seconds
 
     public LRUBufferMgr(FileMgr fm, LogMgr lm, int numbuffs)
     {
@@ -390,7 +390,7 @@ public class LRUBufferMgr
         return null;
     }
 
-    
+
     private Buffer? ChooseUnpinnedBuffer()
     {
         // First, consume truly free frames before evicting existing blocks.
@@ -445,7 +445,7 @@ public class ClockBufferMgr
 {
     private Buffer[] _bufferpool;
     private int _numAvailable;
-    private static  readonly long MAX_TIME = 10000;//10 seconds
+    private static readonly long MAX_TIME = 10000;//10 seconds
     private int _clock = 0;
 
     public ClockBufferMgr(FileMgr fm, LogMgr lm, int numbuffs)
@@ -453,7 +453,7 @@ public class ClockBufferMgr
         _bufferpool = new Buffer[numbuffs];
         // when initialized, all buffers are available
         _numAvailable = numbuffs;
-        for(int i=0;i<numbuffs;i++)
+        for (int i = 0; i < numbuffs; i++)
             _bufferpool[i] = new Buffer(fm, lm);
     }
 
@@ -544,7 +544,7 @@ public class ClockBufferMgr
 
     private Buffer? ChooseUnpinnedBuffer()
     {
-        for(int offset = 0; offset<_bufferpool.Length; offset++)
+        for (int offset = 0; offset < _bufferpool.Length; offset++)
         {
             int idx = (_clock + offset) % _bufferpool.Length;
             Buffer buff = _bufferpool[idx];
@@ -578,14 +578,14 @@ public class CleanFirstBufferMgr
 {
     private Buffer[] _bufferpool;
     private int _numAvailable;
-    private static  readonly long MAX_TIME = 10000;//10 seconds
+    private static readonly long MAX_TIME = 10000;//10 seconds
 
     public CleanFirstBufferMgr(FileMgr fm, LogMgr lm, int numbuffs)
     {
         _bufferpool = new Buffer[numbuffs];
         // when initialized, all buffers are available
         _numAvailable = numbuffs;
-        for(int i=0;i<numbuffs;i++)
+        for (int i = 0; i < numbuffs; i++)
             _bufferpool[i] = new Buffer(fm, lm);
     }
 
@@ -712,14 +712,14 @@ public class LSNBasedBufferMgr
 {
     private Buffer[] _bufferpool;
     private int _numAvailable;
-    private static  readonly long MAX_TIME = 10000;//10 seconds
+    private static readonly long MAX_TIME = 10000;//10 seconds
 
     public LSNBasedBufferMgr(FileMgr fm, LogMgr lm, int numbuffs)
     {
         _bufferpool = new Buffer[numbuffs];
         // when initialized, all buffers are available
         _numAvailable = numbuffs;
-        for(int i=0;i<numbuffs;i++)
+        for (int i = 0; i < numbuffs; i++)
             _bufferpool[i] = new Buffer(fm, lm);
     }
 
@@ -827,7 +827,7 @@ public class LSNBasedBufferMgr
             {
                 if (buff.GetLSN() < lowestLSN)
                 {
-                    lowestLSN = buff.GetLSN();    
+                    lowestLSN = buff.GetLSN();
                     bufWithLowestLSN = buff;
                 }
             }
@@ -854,7 +854,7 @@ public class BufferMgrWithBufferHashTable
 {
     private Buffer[] _bufferpool;
     private int _numAvailable;
-    private static  readonly long MAX_TIME = 10000;//10 seconds
+    private static readonly long MAX_TIME = 10000;//10 seconds
     private Dictionary<BlockId, Buffer> _hashtable = new Dictionary<BlockId, Buffer>();
 
     public BufferMgrWithBufferHashTable(FileMgr fm, LogMgr lm, int numbuffs)
@@ -862,7 +862,7 @@ public class BufferMgrWithBufferHashTable
         _bufferpool = new Buffer[numbuffs];
         // when initialized, all buffers are available
         _numAvailable = numbuffs;
-        for(int i=0;i<numbuffs;i++)
+        for (int i = 0; i < numbuffs; i++)
             _bufferpool[i] = new Buffer(fm, lm);
     }
 
@@ -948,7 +948,7 @@ public class BufferMgrWithBufferHashTable
     {
         if (_hashtable.ContainsKey(blk))
         {
-            Buffer buff  = _hashtable[blk];
+            Buffer buff = _hashtable[blk];
             return buff;
         }
 
@@ -957,7 +957,7 @@ public class BufferMgrWithBufferHashTable
             BlockId b = buff.Block();
             if (b != null && b.Equals(blk))
             {
-                _hashtable.Add(blk, buff);    
+                _hashtable.Add(blk, buff);
                 return buff;
             }
         }
@@ -986,5 +986,5 @@ public class BufferMgrWithBufferHashTable
                 Monitor.PulseAll(this);
             }
         }
-    }   
+    }
 }
