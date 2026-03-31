@@ -1,10 +1,9 @@
 ﻿namespace DBSharp.Log;
-using System.Transactions;
 using DBSharp.File;
 
 public interface LogRecord
 {
-    public const int
+    const int
         CHECKPOINT = 0,
         START = 1,
         COMMIT = 2,
@@ -47,17 +46,38 @@ public class SetStringRecord : LogRecord
 
     public SetStringRecord(Page p)
     {
+        // example of SET STRING RECORD:
+        // <SETSTRING(record type), 2(txnum), junk(filename), 44(blockid), 20(offset), hello(val1), ciao(val2)>
+        int tpos = sizeof(int);
+        txnum = p.GetInt(tpos);
         
+        int fpos = tpos + sizeof(int);
+        string filename = p.GetString(fpos);
+
+        int bpos = fpos + Page.MaxLength(filename.Length);
+        int blknum = p.GetInt(bpos);
+        blk = new BlockId(filename, blknum);
+
+        int opos = bpos + sizeof(int);
+        offset = p.GetInt(opos);
+
+        int vpos = opos + sizeof(int);
+        val = p.GetString(vpos);
     }
 
     public int op()
     {
-        return -1;
+        return LogRecord.SETSTRING;
     }
     public int txNumber()
     {
         return txnum;
     }
+
+    public string toString()
+    {
+        return "<SETSTRING "+ txnum +" "+blk+" "+offset+" "+ val+ ">";
+     }
 
     public void undo(int txnum)
     {
