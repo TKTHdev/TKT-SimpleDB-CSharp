@@ -1,4 +1,5 @@
 ﻿namespace DBSharp.Log;
+using System.Transactions;
 using DBSharp.File;
 
 public interface LogRecord
@@ -31,9 +32,35 @@ public interface LogRecord
             case SETINT:
                 return null;
             case SETSTRING:
-                return null;
+                return new SetStringRecord(p);
             default:
                 return null;
         }
+    }
+}
+
+public class SetStringRecord : LogRecord
+{
+    private int txnum, offset;
+    private string val;
+    private BlockId blk;
+
+    public SetStringRecord(Page p)
+    {
+        
+    }
+
+    public int op()
+    {
+        return -1;
+    }
+    public int txNumber()
+    {
+        return txnum;
+    }
+
+    public void undo(int txnum)
+    {
+        
     }
 }
