@@ -44,7 +44,14 @@ public class LockTable
    {
       lock (this)
       {
-         
+         int val = getLockVal(blk);
+         if (val > 1)
+            locks[blk] = val - 1;
+         else
+         {
+            locks.Remove(blk);
+            Monitor.Pulse(this);
+         }
       }
    }
 
