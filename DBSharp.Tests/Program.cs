@@ -861,8 +861,6 @@ static void Transaction_RollbackUndoesInt()
     tx2.Pin(blk);
     tx2.SetInt(blk, 0, 200, true);
     Assert.Equal(200, tx2.GetInt(blk, 0));
-    // unpin before rollback — Undo internally re-pins the block
-    tx2.Unpin(blk);
     tx2.Rollback();
 
     // tx3 reads — should see original value
@@ -887,7 +885,6 @@ static void Transaction_RollbackUndoesString()
     tx2.Pin(blk);
     tx2.SetString(blk, 0, "changed", true);
     Assert.Equal("changed", tx2.GetString(blk, 0));
-    tx2.Unpin(blk);
     tx2.Rollback();
 
     var tx3 = new Transaction(fm, lm, bm);
@@ -1172,7 +1169,6 @@ static void Transaction_RollbackUnblocksWaiter()
     var tx1 = new Transaction(fm, lm, bm);
     tx1.Pin(blk);
     tx1.SetInt(blk, 0, 2, true);
-    tx1.Unpin(blk);
 
     var waiterStarted = new ManualResetEventSlim(false);
     bool waiterDone = false;

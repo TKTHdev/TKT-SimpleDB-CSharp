@@ -26,7 +26,7 @@ public class BufferList
     public void Pin(BlockId blk)
     {
         Buffer buff = _bm.Pin(blk);
-        _buffers.Add(blk, buff);
+        _buffers[blk] = buff;
         _pins.Add(blk);
     }
 
