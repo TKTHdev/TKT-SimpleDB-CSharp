@@ -45,13 +45,13 @@ public class BufferMgr
         lock (this)
         {
             long timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            Buffer buff = tryToPin(blk);
+            Buffer buff = TryToPin(blk);
             // wait until it can acquire lock
             // MAX_TIME is the maximum time it waits 
             while (buff == null && !WaitingTooLong(timestamp))
             {
                 Monitor.Wait(this, TimeSpan.FromMilliseconds(MAX_TIME));
-                buff = tryToPin(blk);
+                buff = TryToPin(blk);
             }
 
             if (buff == null)
@@ -60,7 +60,7 @@ public class BufferMgr
         }
     }
 
-    private Buffer? tryToPin(BlockId blk)
+    private Buffer? TryToPin(BlockId blk)
     {
         // try finding selected block in buffer pool
         // it might or might not be pinned
@@ -132,7 +132,7 @@ public class FIFOBufferMgr
     private Buffer[] _bufferpool;
     // sequence number of each time the buffer was read in 
     // updated inside ChooseUnpinnedBuffer
-    private long[] _seq_read_in;
+    private long[] _seqReadIn;
     // this is incremented everytime it reads a block from disk to buffer
     private long _seq;
     private int _numAvailable;
@@ -141,14 +141,14 @@ public class FIFOBufferMgr
     public FIFOBufferMgr(FileMgr fm, LogMgr lm, int numbuffs)
     {
         _bufferpool = new Buffer[numbuffs];
-        _seq_read_in = new long[numbuffs];
+        _seqReadIn = new long[numbuffs];
         // when initialized, all buffers are available
         _numAvailable = numbuffs;
         _seq = 0;
         for (int i = 0; i < numbuffs; i++)
         {
             _bufferpool[i] = new Buffer(fm, lm);
-            _seq_read_in[i] = 0;
+            _seqReadIn[i] = 0;
         }
     }
 
@@ -179,13 +179,13 @@ public class FIFOBufferMgr
         lock (this)
         {
             long timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            Buffer buff = tryToPin(blk);
+            Buffer buff = TryToPin(blk);
             // wait until it can acquire lock
             // MAX_TIME is the maximum time it waits 
             while (buff == null && !WaitingTooLong(timestamp))
             {
                 Monitor.Wait(this, TimeSpan.FromMilliseconds(MAX_TIME));
-                buff = tryToPin(blk);
+                buff = TryToPin(blk);
             }
 
             if (buff == null)
@@ -194,7 +194,7 @@ public class FIFOBufferMgr
         }
     }
 
-    private Buffer? tryToPin(BlockId blk)
+    private Buffer? TryToPin(BlockId blk)
     {
         // try finding selected block in buffer pool
         // it might or might not be pinned
@@ -204,7 +204,7 @@ public class FIFOBufferMgr
         if (buff == null)
         {
             // we need this later 
-            // to update _seq_read_in[] 
+            // to update _seqReadIn[] 
             int bufindex = -1;
             // find unpinned buffer
             (buff, bufindex) = ChooseUnpinnedBuffer();
@@ -214,7 +214,7 @@ public class FIFOBufferMgr
             // AssignToBlock always calls Flush(), but actual write-back happens
             // only when the current buffer is dirty (txnum >= 0).
             buff.AssignToBlock(blk);
-            _seq_read_in[bufindex] = ++_seq;
+            _seqReadIn[bufindex] = ++_seq;
         }
         // when it is newly pinned block
         if (buff.IsPinned() == false)
@@ -257,9 +257,9 @@ public class FIFOBufferMgr
         {
             if (!_bufferpool[i].IsPinned())
             {
-                if (_seq_read_in[i] < oldestTime)
+                if (_seqReadIn[i] < oldestTime)
                 {
-                    oldestTime = _seq_read_in[i];
+                    oldestTime = _seqReadIn[i];
                     candidate = i;
                 }
             }
@@ -285,7 +285,7 @@ public class FIFOBufferMgr
 public class LRUBufferMgr
 {
     private Buffer[] _bufferpool;
-    private long[] _seq_unpinned;
+    private long[] _seqUnpinned;
     private long _seq;
     private int _numAvailable;
     private static readonly long MAX_TIME = 10000;//10 seconds
@@ -293,14 +293,14 @@ public class LRUBufferMgr
     public LRUBufferMgr(FileMgr fm, LogMgr lm, int numbuffs)
     {
         _bufferpool = new Buffer[numbuffs];
-        _seq_unpinned = new long[numbuffs];
+        _seqUnpinned = new long[numbuffs];
         // when initialized, all buffers are available
         _numAvailable = numbuffs;
         _seq = 0;
         for (int i = 0; i < numbuffs; i++)
         {
             _bufferpool[i] = new Buffer(fm, lm);
-            _seq_unpinned[i] = 0;
+            _seqUnpinned[i] = 0;
         }
 
     }
@@ -332,13 +332,13 @@ public class LRUBufferMgr
         lock (this)
         {
             long timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            Buffer buff = tryToPin(blk);
+            Buffer buff = TryToPin(blk);
             // wait until it can acquire lock
             // MAX_TIME is the maximum time it waits 
             while (buff == null && !WaitingTooLong(timestamp))
             {
                 Monitor.Wait(this, TimeSpan.FromMilliseconds(MAX_TIME));
-                buff = tryToPin(blk);
+                buff = TryToPin(blk);
             }
 
             if (buff == null)
@@ -347,7 +347,7 @@ public class LRUBufferMgr
         }
     }
 
-    private Buffer? tryToPin(BlockId blk)
+    private Buffer? TryToPin(BlockId blk)
     {
         // try finding selected block in buffer pool
         // it might or might not be pinned
@@ -407,9 +407,9 @@ public class LRUBufferMgr
         {
             if (!_bufferpool[i].IsPinned())
             {
-                if (_seq_unpinned[i] < oldestTime)
+                if (_seqUnpinned[i] < oldestTime)
                 {
-                    oldestTime = _seq_unpinned[i];
+                    oldestTime = _seqUnpinned[i];
                     candidate = i;
                 }
             }
@@ -426,7 +426,7 @@ public class LRUBufferMgr
             {
                 if (object.ReferenceEquals(_bufferpool[i], buff))
                 {
-                    _seq_unpinned[i] = ++_seq;
+                    _seqUnpinned[i] = ++_seq;
                     break;
                 }
             }
@@ -484,13 +484,13 @@ public class ClockBufferMgr
         lock (this)
         {
             long timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            Buffer buff = tryToPin(blk);
+            Buffer buff = TryToPin(blk);
             // wait until it can acquire lock
             // MAX_TIME is the maximum time it waits 
             while (buff == null && !WaitingTooLong(timestamp))
             {
                 Monitor.Wait(this, TimeSpan.FromMilliseconds(MAX_TIME));
-                buff = tryToPin(blk);
+                buff = TryToPin(blk);
             }
 
             if (buff == null)
@@ -499,7 +499,7 @@ public class ClockBufferMgr
         }
     }
 
-    private Buffer? tryToPin(BlockId blk)
+    private Buffer? TryToPin(BlockId blk)
     {
         // try finding selected block in buffer pool
         // it might or might not be pinned
@@ -893,13 +893,13 @@ public class BufferMgrWithBufferHashTable
         lock (this)
         {
             long timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            Buffer buff = tryToPin(blk);
+            Buffer buff = TryToPin(blk);
             // wait until it can acquire lock
             // MAX_TIME is the maximum time it waits 
             while (buff == null && !WaitingTooLong(timestamp))
             {
                 Monitor.Wait(this, TimeSpan.FromMilliseconds(MAX_TIME));
-                buff = tryToPin(blk);
+                buff = TryToPin(blk);
             }
 
             if (buff == null)
@@ -908,7 +908,7 @@ public class BufferMgrWithBufferHashTable
         }
     }
 
-    private Buffer? tryToPin(BlockId blk)
+    private Buffer? TryToPin(BlockId blk)
     {
         // try finding selected block in buffer pool
         // it might or might not be pinned

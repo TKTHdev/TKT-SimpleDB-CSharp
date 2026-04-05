@@ -1,4 +1,4 @@
-﻿using DBSharp.Transactions;
+using DBSharp.Transactions;
 using DBSharp.Buffers;
 using DBSharp.File;
 using Buffer = DBSharp.Buffers.Buffer;
@@ -7,83 +7,83 @@ namespace DBSharp.Log;
 
 public class RecoveryMgr
 {
-    private LogMgr lm;
-    private BufferMgr bm;
-    private Transaction tx;
-    private int txnum;
+    private LogMgr _lm;
+    private BufferMgr _bm;
+    private Transaction _tx;
+    private int _txnum;
 
     public RecoveryMgr(Transaction tx, int txnum, LogMgr lm, BufferMgr bm)
     {
-        this.tx = tx;
-        this.txnum = txnum;
-        this.lm = lm;
-        this.bm = bm;
-        StartRecord.writeToLog(lm, txnum);
+        _tx = tx;
+        _txnum = txnum;
+        _lm = lm;
+        _bm = bm;
+        StartRecord.WriteToLog(lm, txnum);
     }
 
-    public void commit()
+    public void Commit()
     {
-        bm.FlushAll(txnum);
-        int lsn = CommitRecord.writeToLog(lm, txnum);
-        lm.Flush(lsn);
+        _bm.FlushAll(_txnum);
+        int lsn = CommitRecord.WriteToLog(_lm, _txnum);
+        _lm.Flush(lsn);
     }
 
-    public void rollback()
+    public void Rollback()
     {
-        doRollback();
-        bm.FlushAll(txnum);
-        int lsn = RollbackRecord.writeToLog(lm, txnum);
-        lm.Flush(lsn);
+        DoRollback();
+        _bm.FlushAll(_txnum);
+        int lsn = RollbackRecord.WriteToLog(_lm, _txnum);
+        _lm.Flush(lsn);
     }
 
-    public void recover()
+    public void Recover()
     {
-        doRecover();
-        bm.FlushAll(txnum);
-        int lsn = CheckpointRecord.writeToLog(lm);
-        lm.Flush(lsn);
+        DoRecover();
+        _bm.FlushAll(_txnum);
+        int lsn = CheckpointRecord.WriteToLog(_lm);
+        _lm.Flush(lsn);
     }
 
-    public int setInt(Buffer buff, int offset, int newval)
+    public int SetInt(Buffer buff, int offset, int newval)
     {
         int oldval = buff.Contents().GetInt(offset);
         BlockId blk = buff.Block();
-        return SetIntRecord.writeToLog(lm, txnum, blk, offset, oldval);
+        return SetIntRecord.WriteToLog(_lm, _txnum, blk, offset, oldval);
     }
 
-    public int setString(Buffer buff, int offset, String newval)
+    public int SetString(Buffer buff, int offset, String newval)
     {
         string oldval = buff.Contents().GetString(offset);
         BlockId blk = buff.Block();
-        return SetStringRecord.writeToLog(lm, txnum, blk, offset, newval);
+        return SetStringRecord.WriteToLog(_lm, _txnum, blk, offset, newval);
     }
 
-    private void doRollback()
+    private void DoRollback()
     {
-        foreach (byte[] bytes in lm.GetEnumerator())
+        foreach (byte[] bytes in _lm.GetEnumerator())
         {
-            LogRecord rec = LogRecord.createLogRecord(bytes);
-            if (rec.txNumber() == txnum)
+            LogRecord rec = LogRecord.CreateLogRecord(bytes);
+            if (rec.TxNumber() == _txnum)
             {
-                if (rec.op() == LogRecord.START)
+                if (rec.Op() == LogRecord.START)
                     return;
-                rec.undo(tx);
+                rec.Undo(_tx);
             }
         }
     }
 
-    private void doRecover()
+    private void DoRecover()
     {
         List<int> finishedTxs = new List<int>();
-        foreach (byte[] bytes in lm.GetEnumerator())
+        foreach (byte[] bytes in _lm.GetEnumerator())
         {
-            LogRecord rec = LogRecord.createLogRecord(bytes);
-            if (rec.op() == LogRecord.CHECKPOINT)
+            LogRecord rec = LogRecord.CreateLogRecord(bytes);
+            if (rec.Op() == LogRecord.CHECKPOINT)
                 return;
-            if (rec.op() == LogRecord.COMMIT || rec.op() == LogRecord.ROLLBACK)
-                finishedTxs.Add(rec.txNumber());
-            else if (!finishedTxs.Contains(rec.txNumber()))
-                rec.undo(tx);
+            if (rec.Op() == LogRecord.COMMIT || rec.Op() == LogRecord.ROLLBACK)
+                finishedTxs.Add(rec.TxNumber());
+            else if (!finishedTxs.Contains(rec.TxNumber()))
+                rec.Undo(_tx);
         }
     }
 }

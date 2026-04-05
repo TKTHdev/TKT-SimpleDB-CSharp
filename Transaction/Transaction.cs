@@ -1,4 +1,4 @@
-﻿using DBSharp.Buffers;
+using DBSharp.Buffers;
 using DBSharp.File;
 using DBSharp.Lock;
 using DBSharp.Log;
@@ -7,130 +7,130 @@ using Buffer = DBSharp.Buffers.Buffer;
 
 
 /*
- * 
+ *
  */
 
 public class Transaction
 {
-    private static int nextTxNum = 0;
-    private static int ENF_OF_FILE = -1;
-    private RecoveryMgr recoveryMgr;
-    private ConcurrencyMgr concurMgr;
-    private BufferMgr bm;
-    private FileMgr fm;
-    private int txnum;
-    private BufferList mybuffers;
-    private static readonly object locker = new object();
+    private static int _nextTxNum = 0;
+    private static int END_OF_FILE = -1;
+    private RecoveryMgr _recoveryMgr;
+    private ConcurrencyMgr _concurMgr;
+    private BufferMgr _bm;
+    private FileMgr _fm;
+    private int _txnum;
+    private BufferList _myBuffers;
+    private static readonly object _locker = new object();
 
     public Transaction(FileMgr fm, LogMgr lm, BufferMgr bm)
     {
-        this.fm = fm;
-        this.bm = bm;
-        txnum = nextTxNumber();
-        recoveryMgr = new RecoveryMgr(this, txnum, lm, bm);
-        concurMgr = new ConcurrencyMgr();
-        mybuffers = new BufferList(bm);
+        _fm = fm;
+        _bm = bm;
+        _txnum = NextTxNumber();
+        _recoveryMgr = new RecoveryMgr(this, _txnum, lm, bm);
+        _concurMgr = new ConcurrencyMgr();
+        _myBuffers = new BufferList(bm);
     }
 
     public void Commit()
     {
-        recoveryMgr.commit();
-        concurMgr.Release();
-        mybuffers.UnpinAll();
-        Console.WriteLine("transaction" + txnum + " committed");
+        _recoveryMgr.Commit();
+        _concurMgr.Release();
+        _myBuffers.UnpinAll();
+        Console.WriteLine("transaction" + _txnum + " committed");
     }
 
     public void Rollback()
     {
-        recoveryMgr.rollback();
-        concurMgr.Release();
-        mybuffers.UnpinAll();
-        Console.WriteLine("transaction" + txnum + " rolled back");
+        _recoveryMgr.Rollback();
+        _concurMgr.Release();
+        _myBuffers.UnpinAll();
+        Console.WriteLine("transaction" + _txnum + " rolled back");
     }
 
     public void Recover()
     {
-        bm.FlushAll(txnum);
-        recoveryMgr.recover();
+        _bm.FlushAll(_txnum);
+        _recoveryMgr.Recover();
     }
 
     public void Pin(BlockId blk)
     {
-        mybuffers.Pin(blk);
+        _myBuffers.Pin(blk);
     }
 
     public void Unpin(BlockId blk)
     {
-        mybuffers.Unpin(blk);
+        _myBuffers.Unpin(blk);
     }
 
     public int GetInt(BlockId blk, int offset)
     {
-        concurMgr.SLock(blk);
-        Buffer buff = mybuffers.GetBuffer(blk);
+        _concurMgr.SLock(blk);
+        Buffer buff = _myBuffers.GetBuffer(blk);
         return buff.Contents().GetInt(offset);
     }
 
     public string GetString(BlockId blk, int offset)
     {
-        concurMgr.SLock(blk);
-        Buffer buff = mybuffers.GetBuffer(blk);
+        _concurMgr.SLock(blk);
+        Buffer buff = _myBuffers.GetBuffer(blk);
         return buff.Contents().GetString(offset);
     }
 
     public void SetInt(BlockId blk, int offset, int val, bool okToLog)
     {
-        concurMgr.XLock(blk);
-        Buffer buff = mybuffers.GetBuffer(blk);
+        _concurMgr.XLock(blk);
+        Buffer buff = _myBuffers.GetBuffer(blk);
         int lsn = -1;
         if (okToLog)
-            lsn = recoveryMgr.setInt(buff, offset, val);
+            lsn = _recoveryMgr.SetInt(buff, offset, val);
         Page p = buff.Contents();
         p.SetInt(offset, val);
-        buff.SetModified(txnum, lsn);
+        buff.SetModified(_txnum, lsn);
     }
 
     public void SetString(BlockId blk, int offset, string val, bool okToLog)
     {
-        concurMgr.XLock(blk);
-        Buffer buff = mybuffers.GetBuffer(blk);
+        _concurMgr.XLock(blk);
+        Buffer buff = _myBuffers.GetBuffer(blk);
         int lsn = -1;
         if (okToLog)
-            lsn = recoveryMgr.setString(buff, offset, val);
+            lsn = _recoveryMgr.SetString(buff, offset, val);
         Page p = buff.Contents();
         p.SetString(offset, val);
-        buff.SetModified(txnum, lsn);
+        buff.SetModified(_txnum, lsn);
     }
     public int Size(string filename)
     {
-        BlockId dummyBlk = new BlockId(filename, ENF_OF_FILE);
-        concurMgr.SLock(dummyBlk);
-        return fm.Length(filename);
+        BlockId dummyBlk = new BlockId(filename, END_OF_FILE);
+        _concurMgr.SLock(dummyBlk);
+        return _fm.Length(filename);
     }
 
     public BlockId Append(string filename)
     {
-        BlockId dummyBlk = new BlockId(filename, ENF_OF_FILE);
-        concurMgr.XLock(dummyBlk);
-        return fm.Append(filename);
+        BlockId dummyBlk = new BlockId(filename, END_OF_FILE);
+        _concurMgr.XLock(dummyBlk);
+        return _fm.Append(filename);
     }
 
     public int BlockSize()
     {
-        return fm.BlockSize();
+        return _fm.BlockSize();
     }
     public int AvailableBuffs()
     {
-        return bm.Available();
+        return _bm.Available();
     }
 
-    private static int nextTxNumber()
+    private static int NextTxNumber()
     {
-        lock (locker)
+        lock (_locker)
         {
-            nextTxNum++;
-            Console.WriteLine("new transaction: " + nextTxNum);
-            return nextTxNum;
+            _nextTxNum++;
+            Console.WriteLine("new transaction: " + _nextTxNum);
+            return _nextTxNum;
         }
     }
 }

@@ -1,4 +1,4 @@
-﻿namespace DBSharp.Log;
+namespace DBSharp.Log;
 using DBSharp.File;
 using DBSharp.Transactions;
 
@@ -12,11 +12,11 @@ public interface LogRecord
         SETINT = 4,
         SETSTRING = 5;
 
-    int op();
-    int txNumber();
-    void undo(Transaction tx);
+    int Op();
+    int TxNumber();
+    void Undo(Transaction tx);
 
-    static LogRecord createLogRecord(byte[] bytes)
+    static LogRecord CreateLogRecord(byte[] bytes)
     {
         Page p = new Page(bytes);
         switch (p.GetInt(0))
@@ -43,24 +43,24 @@ public class CheckpointRecord : LogRecord
 {
     public CheckpointRecord() { }
 
-    public int op()
+    public int Op()
     {
         return LogRecord.CHECKPOINT;
     }
 
-    public int txNumber()
+    public int TxNumber()
     {
         return -1;
     }
 
-    public string toString()
+    public override string ToString()
     {
         return "<CHECKPOINT>";
     }
 
-    public void undo(Transaction tx) { }
+    public void Undo(Transaction tx) { }
 
-    public static int writeToLog(LogMgr lm)
+    public static int WriteToLog(LogMgr lm)
     {
         byte[] rec = new byte[sizeof(int)];
         Page p = new Page(rec);
@@ -71,32 +71,32 @@ public class CheckpointRecord : LogRecord
 
 public class StartRecord : LogRecord
 {
-    private int txnum;
+    private int _txnum;
 
     public StartRecord(Page p)
     {
         int tpos = sizeof(int);
-        txnum = p.GetInt(tpos);
+        _txnum = p.GetInt(tpos);
     }
 
-    public int op()
+    public int Op()
     {
         return LogRecord.START;
     }
 
-    public int txNumber()
+    public int TxNumber()
     {
-        return txnum;
+        return _txnum;
     }
 
-    public string toString()
+    public override string ToString()
     {
-        return "<START " + txnum + ">";
+        return "<START " + _txnum + ">";
     }
 
-    public void undo(Transaction tx) { }
+    public void Undo(Transaction tx) { }
 
-    public static int writeToLog(LogMgr lm, int txnum)
+    public static int WriteToLog(LogMgr lm, int txnum)
     {
         byte[] rec = new byte[2 * sizeof(int)];
         Page p = new Page(rec);
@@ -108,32 +108,32 @@ public class StartRecord : LogRecord
 
 public class CommitRecord : LogRecord
 {
-    private int txnum;
+    private int _txnum;
 
     public CommitRecord(Page p)
     {
         int tpos = sizeof(int);
-        txnum = p.GetInt(tpos);
+        _txnum = p.GetInt(tpos);
     }
 
-    public int op()
+    public int Op()
     {
         return LogRecord.COMMIT;
     }
 
-    public int txNumber()
+    public int TxNumber()
     {
-        return txnum;
+        return _txnum;
     }
 
-    public string toString()
+    public override string ToString()
     {
-        return "<COMMIT " + txnum + ">";
+        return "<COMMIT " + _txnum + ">";
     }
 
-    public void undo(Transaction tx) { }
+    public void Undo(Transaction tx) { }
 
-    public static int writeToLog(LogMgr lm, int txnum)
+    public static int WriteToLog(LogMgr lm, int txnum)
     {
         byte[] rec = new byte[2 * sizeof(int)];
         Page p = new Page(rec);
@@ -145,32 +145,32 @@ public class CommitRecord : LogRecord
 
 public class RollbackRecord : LogRecord
 {
-    private int txnum;
+    private int _txnum;
 
     public RollbackRecord(Page p)
     {
         int tpos = sizeof(int);
-        txnum = p.GetInt(tpos);
+        _txnum = p.GetInt(tpos);
     }
 
-    public int op()
+    public int Op()
     {
         return LogRecord.ROLLBACK;
     }
 
-    public int txNumber()
+    public int TxNumber()
     {
-        return txnum;
+        return _txnum;
     }
 
-    public string toString()
+    public override string ToString()
     {
-        return "<ROLLBACK " + txnum + ">";
+        return "<ROLLBACK " + _txnum + ">";
     }
 
-    public void undo(Transaction tx) { }
+    public void Undo(Transaction tx) { }
 
-    public static int writeToLog(LogMgr lm, int txnum)
+    public static int WriteToLog(LogMgr lm, int txnum)
     {
         byte[] rec = new byte[2 * sizeof(int)];
         Page p = new Page(rec);
@@ -182,53 +182,53 @@ public class RollbackRecord : LogRecord
 
 public class SetStringRecord : LogRecord
 {
-    private int txnum, offset;
-    private string val;
-    private BlockId blk;
+    private int _txnum, _offset;
+    private string _val;
+    private BlockId _blk;
 
     public SetStringRecord(Page p)
     {
         // example of SET STRING RECORD:
         // <SETSTRING(record type), 2(txnum), junk(filename), 44(blockid), 20(offset), hello(old value), ciao(new value)>
         int tpos = sizeof(int);
-        txnum = p.GetInt(tpos);
+        _txnum = p.GetInt(tpos);
 
         int fpos = tpos + sizeof(int);
         string filename = p.GetString(fpos);
 
         int bpos = fpos + Page.MaxLength(filename.Length);
         int blknum = p.GetInt(bpos);
-        blk = new BlockId(filename, blknum);
+        _blk = new BlockId(filename, blknum);
 
         int opos = bpos + sizeof(int);
-        offset = p.GetInt(opos);
+        _offset = p.GetInt(opos);
 
         int vpos = opos + sizeof(int);
-        val = p.GetString(vpos);
+        _val = p.GetString(vpos);
     }
 
-    public int op()
+    public int Op()
     {
         return LogRecord.SETSTRING;
     }
-    public int txNumber()
+    public int TxNumber()
     {
-        return txnum;
+        return _txnum;
     }
 
-    public string toString()
+    public override string ToString()
     {
-        return "<SETSTRING " + txnum + " " + blk + " " + offset + " " + val + ">";
+        return "<SETSTRING " + _txnum + " " + _blk + " " + _offset + " " + _val + ">";
     }
 
-    public void undo(Transaction tx)
+    public void Undo(Transaction tx)
     {
-        tx.Pin(blk);
-        tx.SetString(blk, offset, val, false); // don't log the undo!
-        tx.Unpin(blk);
+        tx.Pin(_blk);
+        tx.SetString(_blk, _offset, _val, false); // don't log the undo!
+        tx.Unpin(_blk);
     }
 
-    public static int writeToLog(LogMgr lm, int txnum, BlockId blk, int offset, string val)
+    public static int WriteToLog(LogMgr lm, int txnum, BlockId blk, int offset, string val)
     {
         int tpos = sizeof(int);
         int fpos = tpos + sizeof(int);
@@ -250,52 +250,52 @@ public class SetStringRecord : LogRecord
 
 public class SetIntRecord : LogRecord
 {
-    private int txnum, offset;
-    private int val;
-    private BlockId blk;
+    private int _txnum, _offset;
+    private int _val;
+    private BlockId _blk;
 
     public SetIntRecord(Page p)
     {
         int tpos = sizeof(int);
-        txnum = p.GetInt(tpos);
+        _txnum = p.GetInt(tpos);
 
         int fpos = tpos + sizeof(int);
         string filename = p.GetString(fpos);
 
         int bpos = fpos + Page.MaxLength(filename.Length);
         int blknum = p.GetInt(bpos);
-        blk = new BlockId(filename, blknum);
+        _blk = new BlockId(filename, blknum);
 
         int opos = bpos + sizeof(int);
-        offset = p.GetInt(opos);
+        _offset = p.GetInt(opos);
 
         int vpos = opos + sizeof(int);
-        val = p.GetInt(vpos);
+        _val = p.GetInt(vpos);
     }
 
-    public int op()
+    public int Op()
     {
         return LogRecord.SETINT;
     }
 
-    public int txNumber()
+    public int TxNumber()
     {
-        return txnum;
+        return _txnum;
     }
 
-    public string toString()
+    public override string ToString()
     {
-        return "<SETINT " + txnum + " " + blk + " " + offset + " " + val + ">";
+        return "<SETINT " + _txnum + " " + _blk + " " + _offset + " " + _val + ">";
     }
 
-    public void undo(Transaction tx)
+    public void Undo(Transaction tx)
     {
-        tx.Pin(blk);
-        tx.SetInt(blk, offset, val, false);
-        tx.Unpin(blk);
+        tx.Pin(_blk);
+        tx.SetInt(_blk, _offset, _val, false);
+        tx.Unpin(_blk);
     }
 
-    public static int writeToLog(LogMgr lm, int txnum, BlockId blk, int offset, int val)
+    public static int WriteToLog(LogMgr lm, int txnum, BlockId blk, int offset, int val)
     {
         int tpos = sizeof(int);
         int fpos = tpos + sizeof(int);

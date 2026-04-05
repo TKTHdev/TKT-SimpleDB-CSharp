@@ -17,9 +17,9 @@ class LogIterator : IEnumerable<byte[]>, IEnumerator<byte[]>
         _blk = blk;
         byte[] b = new byte[fm.BlockSize()];
         _p = new Page(b);
-        moveToBlock(_blk);
+        MoveToBlock(_blk);
     }
-    private void moveToBlock(BlockId blk)
+    private void MoveToBlock(BlockId blk)
     {
         // in spite of its name, 
         // it just loads the selected block to the page.
@@ -37,7 +37,7 @@ class LogIterator : IEnumerable<byte[]>, IEnumerator<byte[]>
         if (_currentPos >= _fm.BlockSize())
         {
             _blk = new BlockId(_blk.FileName(), _blk.Number() - 1);
-            moveToBlock(_blk);
+            MoveToBlock(_blk);
         }
         // any record in the block is composed of:
         // [length of the record(int = 4 bytes)][record]

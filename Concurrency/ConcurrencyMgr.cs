@@ -1,40 +1,40 @@
-﻿using DBSharp.File;
+using DBSharp.File;
 
 namespace DBSharp.Lock;
 
 public class ConcurrencyMgr
 {
-    private static LockTable locktbl = new LockTable();
-    private Dictionary<BlockId, string> locks = new Dictionary<BlockId, string>();
+    private static LockTable _lockTable = new LockTable();
+    private Dictionary<BlockId, string> _locks = new Dictionary<BlockId, string>();
 
     public void SLock(BlockId blk)
     {
-        if (!locks.ContainsKey(blk))
+        if (!_locks.ContainsKey(blk))
         {
-            locktbl.SLock(blk);
-            locks[blk] = "S";
+            _lockTable.SLock(blk);
+            _locks[blk] = "S";
         }
     }
 
     public void XLock(BlockId blk)
     {
-        if (!hasXLock(blk))
+        if (!HasXLock(blk))
         {
             SLock(blk);
-            locktbl.XLock(blk);
-            locks[blk] = "X";
+            _lockTable.XLock(blk);
+            _locks[blk] = "X";
         }
     }
 
     public void Release()
     {
-        foreach (BlockId blk in locks.Keys)
-            locktbl.Unlock(blk);
-        locks.Clear();
+        foreach (BlockId blk in _locks.Keys)
+            _lockTable.Unlock(blk);
+        _locks.Clear();
     }
 
-    private bool hasXLock(BlockId blk)
+    private bool HasXLock(BlockId blk)
     {
-        return locks.TryGetValue(blk, out string locktype) && locktype == "X";
+        return _locks.TryGetValue(blk, out string locktype) && locktype == "X";
     }
 }

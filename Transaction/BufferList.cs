@@ -1,4 +1,4 @@
-﻿using DBSharp.Buffers;
+using DBSharp.Buffers;
 using DBSharp.File;
 namespace DBSharp.Transactions;
 using Buffer = DBSharp.Buffers.Buffer;
@@ -9,44 +9,44 @@ using Buffer = DBSharp.Buffers.Buffer;
  */
 public class BufferList
 {
-    private Dictionary<BlockId, Buffer> buffers = new Dictionary<BlockId, Buffer>();
-    private List<BlockId> pins = new List<BlockId>();
-    private BufferMgr bm;
+    private Dictionary<BlockId, Buffer> _buffers = new Dictionary<BlockId, Buffer>();
+    private List<BlockId> _pins = new List<BlockId>();
+    private BufferMgr _bm;
 
     public BufferList(BufferMgr bm)
     {
-        this.bm = bm;
+        _bm = bm;
     }
 
     public Buffer GetBuffer(BlockId blk)
     {
-        return buffers[blk];
+        return _buffers[blk];
     }
 
     public void Pin(BlockId blk)
     {
-        Buffer buff = bm.Pin(blk);
-        buffers.Add(blk, buff);
-        pins.Add(blk);
+        Buffer buff = _bm.Pin(blk);
+        _buffers.Add(blk, buff);
+        _pins.Add(blk);
     }
 
     public void Unpin(BlockId blk)
     {
-        Buffer buff = buffers[blk];
-        bm.Unpin(buff);
-        pins.Remove(blk);
-        if (!pins.Contains(blk))
-            buffers.Remove(blk);
+        Buffer buff = _buffers[blk];
+        _bm.Unpin(buff);
+        _pins.Remove(blk);
+        if (!_pins.Contains(blk))
+            _buffers.Remove(blk);
     }
 
     public void UnpinAll()
     {
-        foreach (BlockId blk in pins)
+        foreach (BlockId blk in _pins)
         {
-            Buffer buff = buffers[blk];
-            bm.Unpin(buff);
+            Buffer buff = _buffers[blk];
+            _bm.Unpin(buff);
         }
-        buffers.Clear();
-        pins.Clear();
+        _buffers.Clear();
+        _pins.Clear();
     }
 }

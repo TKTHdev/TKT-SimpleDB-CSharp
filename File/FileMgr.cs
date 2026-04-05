@@ -12,7 +12,7 @@ public class FileMgr
             _blocksWritten = 0;
             _blocksAppended = 0;
         }
-        public void RecordBlocksWriten(int numofblocks) => _blocksWritten += numofblocks;
+        public void RecordBlocksWritten(int numofblocks) => _blocksWritten += numofblocks;
         public void RecordBlocksRead(int numofblocks) => _blocksRead += numofblocks;
         public void RecordBlocksAppended(int numofblocks) => _blocksAppended += numofblocks;
         public (int, int, int) GetStats() => (_blocksWritten, _blocksRead, _blocksAppended);
@@ -21,7 +21,7 @@ public class FileMgr
     private readonly int _blockSize;
     private readonly bool _isNew;
     private readonly Dictionary<string, FileStream> _openFiles = new();
-    private FileMgrStatistics FileMgrStats = new();
+    private FileMgrStatistics _fileMgrStats = new();
     public FileMgr(DirectoryInfo dbDirectory, int blocksize)
     {
         _dbDirectory = dbDirectory;
@@ -42,7 +42,7 @@ public class FileMgr
                 FileStream fs = GetFile(blk.FileName());
                 fs.Seek(blk.Number() * _blockSize, SeekOrigin.Begin);
                 fs.Read(p.Contents(), 0, _blockSize);
-                FileMgrStats.RecordBlocksRead(1);
+                _fileMgrStats.RecordBlocksRead(1);
             }
             catch (IOException e)
             {
@@ -59,7 +59,7 @@ public class FileMgr
                 FileStream fs = GetFile(blk.FileName());
                 fs.Seek(blk.Number() * _blockSize, SeekOrigin.Begin);
                 fs.Write(p.Contents());
-                FileMgrStats.RecordBlocksWriten(1);
+                _fileMgrStats.RecordBlocksWritten(1);
             }
             catch (IOException e)
             {
@@ -118,6 +118,6 @@ public class FileMgr
     }
     public (int, int, int) GetStats()
     {
-        return FileMgrStats.GetStats();
+        return _fileMgrStats.GetStats();
     }
 }

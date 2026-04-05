@@ -1,4 +1,4 @@
-﻿using DBSharp.File;
+using DBSharp.File;
 
 namespace DBSharp.Lock;
 /*
@@ -9,7 +9,7 @@ namespace DBSharp.Lock;
 public class LockTable
 {
     private static readonly long MAX_TIME = 10000; // 10 seconds
-    private Dictionary<BlockId, int> locks = new Dictionary<BlockId, int>();
+    private Dictionary<BlockId, int> _locks = new Dictionary<BlockId, int>();
 
     public void SLock(BlockId blk)
     {
@@ -18,12 +18,12 @@ public class LockTable
             try
             {
                 long timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-                while (hasXLock(blk) && !waitingTooLong(timestamp))
+                while (HasXLock(blk) && !WaitingTooLong(timestamp))
                     Monitor.Wait(this, TimeSpan.FromMilliseconds(MAX_TIME));
-                if (hasXLock(blk))
+                if (HasXLock(blk))
                     throw new LockAbortException();
-                int val = getLockVal(blk);
-                locks[blk] = val + 1;
+                int val = GetLockVal(blk);
+                _locks[blk] = val + 1;
             }
             catch
             {
@@ -36,11 +36,11 @@ public class LockTable
         lock (this)
         {
             long timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            while (hasOtherSLocks(blk) && !waitingTooLong(timestamp))
+            while (HasOtherSLocks(blk) && !WaitingTooLong(timestamp))
                 Monitor.Wait(this, TimeSpan.FromMilliseconds(MAX_TIME));
-            if (hasOtherSLocks(blk))
+            if (HasOtherSLocks(blk))
                 throw new LockAbortException();
-            locks[blk] = -1;
+            _locks[blk] = -1;
         }
     }
 
@@ -48,27 +48,27 @@ public class LockTable
     {
         lock (this)
         {
-            int val = getLockVal(blk);
+            int val = GetLockVal(blk);
             if (val > 1)
-                locks[blk] = val - 1;
+                _locks[blk] = val - 1;
             else
             {
-                locks.Remove(blk);
+                _locks.Remove(blk);
                 Monitor.Pulse(this);
             }
         }
     }
 
-    private bool hasXLock(BlockId blk)
+    private bool HasXLock(BlockId blk)
     {
-        return getLockVal(blk) < 0;
+        return GetLockVal(blk) < 0;
     }
-    private bool hasOtherSLocks(BlockId blk)
+    private bool HasOtherSLocks(BlockId blk)
     {
-        return getLockVal(blk) > 1;
+        return GetLockVal(blk) > 1;
     }
 
-    private bool waitingTooLong(long startTime)
+    private bool WaitingTooLong(long startTime)
     {
         long now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         return now - startTime > MAX_TIME;
@@ -76,8 +76,8 @@ public class LockTable
 
     // Unlike Java's Map.get() which returns null for missing keys,
     // C# Dictionary[] throws KeyNotFoundException, so use TryGetValue.
-    private int getLockVal(BlockId blk)
+    private int GetLockVal(BlockId blk)
     {
-        return locks.TryGetValue(blk, out int ival) ? ival : 0;
+        return _locks.TryGetValue(blk, out int ival) ? ival : 0;
     }
 }

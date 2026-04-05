@@ -21,7 +21,7 @@ public class LogMgr
         int logsize = fm.Length(logfile);
         if (logsize == 0)// when there's no existing block
         {
-            _currentblk = appendNewBlock();
+            _currentblk = AppendNewBlock();
         }
         else
         {
@@ -34,9 +34,9 @@ public class LogMgr
     public void Flush(int lsn)
     {
         // if there's any record that exists in a page but hasn't been written to disk
-        // then flush()
+        // then Flush()
         if (lsn >= _lastSavedLSN)
-            flush();
+            Flush();
         // the records whose lsn is higher than the one given might also be written to the disk
         /*
         log page:
@@ -46,7 +46,7 @@ public class LogMgr
     }
     public IEnumerable<byte[]> GetEnumerator()
     {
-        flush();
+        Flush();
         return new LogIterator(_fm, _currentblk);
     }
     // it just appends a new log record to the  page
@@ -59,9 +59,9 @@ public class LogMgr
         if (boundary - bytesneeded < sizeof(int))
         {
             // no more empty room for a new record so flush the current page 
-            flush();
+            Flush();
             // then new block 
-            _currentblk = appendNewBlock();
+            _currentblk = AppendNewBlock();
             // reset page
             boundary = _logpage.GetInt(0);
         }
@@ -72,14 +72,14 @@ public class LogMgr
         _latestLSN += 1;
         return _latestLSN;
     }
-    private BlockId appendNewBlock()
+    private BlockId AppendNewBlock()
     {
         BlockId blk = _fm.Append(_logfile);
         _logpage.SetInt(0, _fm.BlockSize());
         _fm.Write(blk, _logpage);
         return blk;
     }
-    private void flush()
+    private void Flush()
     {
         // just write the whole page to disk
         _fm.Write(_currentblk, _logpage);
