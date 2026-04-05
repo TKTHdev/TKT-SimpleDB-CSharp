@@ -1,6 +1,10 @@
 ﻿using DBSharp.File;
 
 namespace DBSharp.Lock;
+/*
+ * Concurrency manager will always obtain an SLock on the block before requesting the Xlock
+ * So a value higher than 1 indicates that some other transaction also has a lock on the block
+ */
 
 public class LockTable
 {
