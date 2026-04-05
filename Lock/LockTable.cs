@@ -16,7 +16,7 @@ public class LockTable
                 long timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
                 while (hasXLock(blk) && !waitingTooLong(timestamp))
                     Monitor.Wait(this, TimeSpan.FromMilliseconds(MAX_TIME));
-                if (hasOtherSLocks(blk))
+                if (hasXLock(blk))
                     throw new LockAbortException();
                 int val = getLockVal(blk);
                 locks[blk] = val + 1;
@@ -32,9 +32,9 @@ public class LockTable
         lock (this)
         {
             long timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            while (hasOtherSLocks(blk) && !waitingTooLong(timestamp))
+            while ((hasOtherSLocks(blk) || hasXLock(blk)) && !waitingTooLong(timestamp))
                 Monitor.Wait(this, TimeSpan.FromMilliseconds(MAX_TIME));
-            if (hasXLock(blk))
+            if (hasOtherSLocks(blk) || hasXLock(blk))
                 throw new LockAbortException();
             locks[blk] = -1;
         }
