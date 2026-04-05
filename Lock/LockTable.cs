@@ -66,11 +66,12 @@ public class LockTable
 
    private bool waitingTooLong(long startTime)
    {
-      return true;
+     long now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+     return now - startTime > MAX_TIME;
    }
 
    private int getLockVal(BlockId blk)
    {
-      return 0;
+      return locks.TryGetValue(blk, out int ival) ? ival : 0;
    }
 }
