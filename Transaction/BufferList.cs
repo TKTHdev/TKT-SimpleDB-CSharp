@@ -16,6 +16,7 @@ public class BufferList
 
     public BufferList(BufferMgr bm)
     {
+        this.bm = bm;
     }
 
     public Buffer GetBuffer(BlockId blk)
@@ -25,14 +26,28 @@ public class BufferList
 
     public void Pin(BlockId blk)
     {
+        Buffer buff = bm.Pin(blk);
+        buffers.Add(blk, buff);
+        pins.Add(blk);
     }
 
     public void Unpin(BlockId blk)
     {
+        Buffer buff = buffers[blk];
+        bm.Unpin(buff);
+        pins.Remove(blk);
+        if (!pins.Contains(blk))
+            buffers.Remove(blk);
     }
 
     public void UnpinAll()
     {
+        foreach (BlockId blk in pins)
+        {
+            Buffer buff = buffers[blk];
+            bm.Unpin(buff);
+        }
+        buffers.Clear();
+        pins.Clear();
     }
-    
 }
