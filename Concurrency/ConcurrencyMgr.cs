@@ -26,9 +26,10 @@ public class ConcurrencyMgr
         }
     }
 
-    public void release()
+    public void Release()
     {
         
+            locktbl.Unlock(blk);
     }
 
     private bool hasXLock(BlockId blk)
