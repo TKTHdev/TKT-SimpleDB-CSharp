@@ -7,8 +7,13 @@ public class ConcurrencyMgr
     private static LockTable locktbl  = new LockTable();
     private Dictionary<BlockId, string> locks = new Dictionary<BlockId, string>();
 
-    public void slock(BlockId blk)
+    public void SLock(BlockId blk)
     {
+        if (!locks.ContainsKey(blk))
+        {
+            locktbl.SLock(blk);
+            locks[blk] = "S";
+        }
     }
 
     public void xlock(BlockId blk)
