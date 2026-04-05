@@ -26,6 +26,7 @@ public class Transaction
     {
         this.fm = fm;
         this.bm = bm;
+        txnum = nextTxNumber();
         recoveryMgr = new RecoveryMgr(this, txnum, lm, bm);
         concurMgr = new ConcurrencyMgr();
         mybuffers = new BufferList(bm);
