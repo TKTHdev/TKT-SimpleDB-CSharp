@@ -57,11 +57,11 @@ public class LockTable
 
    private bool hasXLock(BlockId blk)
    {
-      return true;
+      return getLockVal(blk) < 0;
    }
    private bool hasOtherSLocks(BlockId blk)
    {
-      return true;
+      return getLockVal(blk) > 1;
    }
 
    private bool waitingTooLong(long startTime)
