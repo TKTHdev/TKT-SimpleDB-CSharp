@@ -27,7 +27,7 @@ public class Transaction
         this.bm  = bm;
         recoveryMgr = new RecoveryMgr(this, txnum, lm, bm);
         concurMgr = new ConcurrencyMgr();
-        mybuffers = new BufferList();
+        mybuffers = new BufferList(bm);
     }
 
     public void Commit()
