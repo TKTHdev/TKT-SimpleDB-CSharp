@@ -61,4 +61,19 @@ public class RecoveryMgr
     {}
     private void  doRecover()
     {}
+
+    private void doRollback()
+    {
+        foreach (byte[] bytes in lm.GetEnumerator())
+        {
+            LogRecord rec = LogRecord.createLogRecord(bytes);
+            if (rec.txNumber() == txnum)
+            {
+                if (rec.op() == LogRecord.START)
+                    return;
+                rec.undo(tx);
+            }
+        }
+    }
+
 }
