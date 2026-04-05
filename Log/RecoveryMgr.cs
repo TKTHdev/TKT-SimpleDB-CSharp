@@ -11,10 +11,10 @@ public class RecoveryMgr
     private BufferMgr bm;
     private Transaction tx;
     private int txnum;
-    
+
     public RecoveryMgr(Transaction tx, int txnum, LogMgr lm, BufferMgr bm)
     {
-        this.tx  = tx;
+        this.tx = tx;
         this.txnum = txnum;
         this.lm = lm;
         this.bm = bm;

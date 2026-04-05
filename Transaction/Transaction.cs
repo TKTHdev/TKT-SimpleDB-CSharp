@@ -130,7 +130,7 @@ public class Transaction
         {
             nextTxNum++;
             Console.WriteLine("new transaction: " + nextTxNum);
-            return nextTxNum; 
+            return nextTxNum;
         }
     }
 }
