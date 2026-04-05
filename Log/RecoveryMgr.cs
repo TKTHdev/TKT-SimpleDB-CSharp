@@ -1,4 +1,4 @@
-﻿using System.Transactions;
+﻿using DBSharp.Transactions;
 using DBSharp.Buffers;
 using Buffer = DBSharp.Buffers.Buffer;
 
