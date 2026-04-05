@@ -24,7 +24,7 @@ public class Transaction
     public Transaction(FileMgr fm, LogMgr lm, BufferMgr bm)
     {
         this.fm = fm;
-        this.bm  = bm;
+        this.bm = bm;
         recoveryMgr = new RecoveryMgr(this, txnum, lm, bm);
         concurMgr = new ConcurrencyMgr();
         mybuffers = new BufferList(bm);
@@ -55,7 +55,7 @@ public class Transaction
     {
     }
     public void Unpin(BlockId blk)
-    {}
+    { }
 
     public int GetInt(BlockId blk, int offset)
     {
@@ -73,7 +73,7 @@ public class Transaction
 
     public void SetString(BlockId blk, int offset, string val, bool okToLog)
     {
-        
+
     }
     public int Size(string filename)
     {

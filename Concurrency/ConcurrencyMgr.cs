@@ -4,7 +4,7 @@ namespace DBSharp.Lock;
 
 public class ConcurrencyMgr
 {
-    private static LockTable locktbl  = new LockTable();
+    private static LockTable locktbl = new LockTable();
     private Dictionary<BlockId, string> locks = new Dictionary<BlockId, string>();
 
     public void SLock(BlockId blk)

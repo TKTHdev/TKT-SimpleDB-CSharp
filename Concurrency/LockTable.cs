@@ -36,7 +36,7 @@ public class LockTable
         lock (this)
         {
             long timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            while (hasOtherSLocks(blk)  && !waitingTooLong(timestamp))
+            while (hasOtherSLocks(blk) && !waitingTooLong(timestamp))
                 Monitor.Wait(this, TimeSpan.FromMilliseconds(MAX_TIME));
             if (hasOtherSLocks(blk))
                 throw new LockAbortException();
