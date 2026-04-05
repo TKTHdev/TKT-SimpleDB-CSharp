@@ -28,8 +28,9 @@ public class ConcurrencyMgr
 
     public void Release()
     {
-        
+        foreach (BlockId blk in locks.Keys)
             locktbl.Unlock(blk);
+        locks.Clear();
     }
 
     private bool hasXLock(BlockId blk)
