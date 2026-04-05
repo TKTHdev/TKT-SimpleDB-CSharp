@@ -50,7 +50,7 @@ public class SetStringRecord : LogRecord
         // <SETSTRING(record type), 2(txnum), junk(filename), 44(blockid), 20(offset), hello(val1), ciao(val2)>
         int tpos = sizeof(int);
         txnum = p.GetInt(tpos);
-        
+
         int fpos = tpos + sizeof(int);
         string filename = p.GetString(fpos);
 
@@ -76,11 +76,11 @@ public class SetStringRecord : LogRecord
 
     public string toString()
     {
-        return "<SETSTRING "+ txnum +" "+blk+" "+offset+" "+ val+ ">";
-     }
+        return "<SETSTRING " + txnum + " " + blk + " " + offset + " " + val + ">";
+    }
 
     public void undo(int txnum)
     {
-        
+
     }
 }
