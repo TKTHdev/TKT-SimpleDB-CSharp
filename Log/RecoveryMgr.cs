@@ -57,10 +57,6 @@ public class RecoveryMgr
         BlockId blk = buff.Block();
         return SetStringRecord.writeToLog(lm, txnum, blk, offset, newval);
     }
-    private void  doRollback()
-    {}
-    private void  doRecover()
-    {}
 
     private void doRollback()
     {
@@ -76,4 +72,18 @@ public class RecoveryMgr
         }
     }
 
+    private void doRecover()
+    {
+        List<int> finishedTxs = new List<int>();
+        foreach (byte[] bytes in lm.GetEnumerator())
+        {
+            LogRecord rec = LogRecord.createLogRecord(bytes);
+            if (rec.op() == LogRecord.CHECKPOINT)
+                return;
+            if (rec.op() == LogRecord.COMMIT || rec.op() == LogRecord.ROLLBACK)
+                finishedTxs.Add(rec.txNumber());
+            else if (!finishedTxs.Contains(rec.txNumber()))
+                rec.undo(tx);
+        }
+    }
 }
