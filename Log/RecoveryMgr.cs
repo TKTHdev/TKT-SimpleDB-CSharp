@@ -55,7 +55,7 @@ public class RecoveryMgr
     {
         string oldval = buff.Contents().GetString(offset);
         BlockId blk = buff.Block();
-        return SetStringRecord.WriteToLog(_lm, _txnum, blk, offset, newval);
+        return SetStringRecord.WriteToLog(_lm, _txnum, blk, offset, oldval);
     }
 
     private void DoRollback()

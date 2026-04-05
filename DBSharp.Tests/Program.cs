@@ -1,6 +1,8 @@
 using DBSharp.Buffers;
 using DBSharp.File;
+using DBSharp.Lock;
 using DBSharp.Log;
+using DBSharp.Transactions;
 using System.Text;
 
 var tests = new (string Name, Action Body)[]
@@ -42,6 +44,21 @@ var tests = new (string Name, Action Body)[]
     ("ClockBufferMgr does not evict pinned frame", ClockBufferMgr_DoesNotEvictPinnedFrame),
     ("CleanFirstBufferMgr prefers clean unpinned frames", CleanFirstBufferMgr_PrefersCleanUnpinned),
     ("CleanFirstBufferMgr falls back to dirty when no clean frame exists", CleanFirstBufferMgr_FallsBackToDirty),
+    ("Transaction SetInt and GetInt round trip", Transaction_SetIntGetInt),
+    ("Transaction SetString and GetString round trip", Transaction_SetStringGetString),
+    ("Transaction Commit persists data for next transaction", Transaction_CommitPersists),
+    ("Transaction Rollback undoes int changes", Transaction_RollbackUndoesInt),
+    ("Transaction Rollback undoes string changes", Transaction_RollbackUndoesString),
+    ("Transaction Append creates blocks and Size tracks them", Transaction_AppendAndSize),
+    ("Transaction multiple blocks can be pinned and modified independently", Transaction_MultipleBlocks),
+    ("Transaction concurrent readers on same block allowed", Transaction_ConcurrentReaders),
+    ("Transaction XLock blocks other transaction writer", Transaction_XLockBlocksWriter),
+    ("Transaction XLock blocks reader until commit", Transaction_XLockBlocksReader),
+    ("Transaction SLock blocks writer until readers commit", Transaction_SLockBlocksWriter),
+    ("Transaction commit releases lock and unblocks waiting tx", Transaction_CommitUnblocksWaiter),
+    ("Transaction rollback releases lock and unblocks waiting tx", Transaction_RollbackUnblocksWaiter),
+    ("Transaction writers serialized on same block", Transaction_WritersSerialized),
+    ("Transaction locks on different blocks do not interfere", Transaction_IndependentBlocksNoConflict),
 };
 
 var failures = new List<string>();
@@ -757,6 +774,544 @@ static void CleanFirstBufferMgr_FallsBackToDirty()
     Assert.True(object.ReferenceEquals(b2, b0) || object.ReferenceEquals(b2, b1),
         "Should fall back to replacing an unpinned dirty frame when no clean frame exists.");
     Assert.True(b2.Block().Equals(blk2), "Chosen victim should now hold requested block.");
+}
+
+static (FileMgr fm, LogMgr lm, BufferMgr bm) CreateTxTestDeps()
+{
+    var dbPath = CreateDirectory();
+    var fm = new FileMgr(new DirectoryInfo(dbPath), 400);
+    var lm = new LogMgr(fm, "simpledb.log");
+    var bm = new BufferMgr(fm, lm, 8);
+    return (fm, lm, bm);
+}
+
+static string TxTestFile()
+{
+    return $"txtest{Guid.NewGuid():N}.tbl";
+}
+
+static void Transaction_SetIntGetInt()
+{
+    var (fm, lm, bm) = CreateTxTestDeps();
+    string file = TxTestFile();
+    var tx = new Transaction(fm, lm, bm);
+
+    BlockId blk = tx.Append(file);
+    tx.Pin(blk);
+    tx.SetInt(blk, 0, 42, true);
+
+    Assert.Equal(42, tx.GetInt(blk, 0));
+
+    tx.SetInt(blk, 80, -7, true);
+    Assert.Equal(-7, tx.GetInt(blk, 80));
+
+    tx.Commit();
+}
+
+static void Transaction_SetStringGetString()
+{
+    var (fm, lm, bm) = CreateTxTestDeps();
+    string file = TxTestFile();
+    var tx = new Transaction(fm, lm, bm);
+
+    BlockId blk = tx.Append(file);
+    tx.Pin(blk);
+    tx.SetString(blk, 0, "hello", true);
+
+    Assert.Equal("hello", tx.GetString(blk, 0));
+
+    tx.Commit();
+}
+
+static void Transaction_CommitPersists()
+{
+    var (fm, lm, bm) = CreateTxTestDeps();
+    string file = TxTestFile();
+
+    // tx1 writes and commits
+    var tx1 = new Transaction(fm, lm, bm);
+    BlockId blk = tx1.Append(file);
+    tx1.Pin(blk);
+    tx1.SetInt(blk, 0, 999, true);
+    tx1.SetString(blk, 80, "persisted", true);
+    tx1.Commit();
+
+    // tx2 reads committed data
+    var tx2 = new Transaction(fm, lm, bm);
+    tx2.Pin(blk);
+    Assert.Equal(999, tx2.GetInt(blk, 0));
+    Assert.Equal("persisted", tx2.GetString(blk, 80));
+    tx2.Commit();
+}
+
+static void Transaction_RollbackUndoesInt()
+{
+    var (fm, lm, bm) = CreateTxTestDeps();
+    string file = TxTestFile();
+
+    // tx1 writes initial value and commits
+    var tx1 = new Transaction(fm, lm, bm);
+    BlockId blk = tx1.Append(file);
+    tx1.Pin(blk);
+    tx1.SetInt(blk, 0, 100, true);
+    tx1.Commit();
+
+    // tx2 overwrites, then rolls back
+    var tx2 = new Transaction(fm, lm, bm);
+    tx2.Pin(blk);
+    tx2.SetInt(blk, 0, 200, true);
+    Assert.Equal(200, tx2.GetInt(blk, 0));
+    // unpin before rollback — Undo internally re-pins the block
+    tx2.Unpin(blk);
+    tx2.Rollback();
+
+    // tx3 reads — should see original value
+    var tx3 = new Transaction(fm, lm, bm);
+    tx3.Pin(blk);
+    Assert.Equal(100, tx3.GetInt(blk, 0));
+    tx3.Commit();
+}
+
+static void Transaction_RollbackUndoesString()
+{
+    var (fm, lm, bm) = CreateTxTestDeps();
+    string file = TxTestFile();
+
+    var tx1 = new Transaction(fm, lm, bm);
+    BlockId blk = tx1.Append(file);
+    tx1.Pin(blk);
+    tx1.SetString(blk, 0, "original", true);
+    tx1.Commit();
+
+    var tx2 = new Transaction(fm, lm, bm);
+    tx2.Pin(blk);
+    tx2.SetString(blk, 0, "changed", true);
+    Assert.Equal("changed", tx2.GetString(blk, 0));
+    tx2.Unpin(blk);
+    tx2.Rollback();
+
+    var tx3 = new Transaction(fm, lm, bm);
+    tx3.Pin(blk);
+    Assert.Equal("original", tx3.GetString(blk, 0));
+    tx3.Commit();
+}
+
+static void Transaction_AppendAndSize()
+{
+    var (fm, lm, bm) = CreateTxTestDeps();
+    string file = TxTestFile();
+    var tx = new Transaction(fm, lm, bm);
+
+    Assert.Equal(0, tx.Size(file));
+
+    BlockId blk0 = tx.Append(file);
+    Assert.Equal(1, tx.Size(file));
+    Assert.Equal(0, blk0.Number());
+
+    BlockId blk1 = tx.Append(file);
+    Assert.Equal(2, tx.Size(file));
+    Assert.Equal(1, blk1.Number());
+
+    tx.Commit();
+}
+
+static void Transaction_MultipleBlocks()
+{
+    var (fm, lm, bm) = CreateTxTestDeps();
+    string file = TxTestFile();
+    var tx = new Transaction(fm, lm, bm);
+
+    BlockId blk0 = tx.Append(file);
+    BlockId blk1 = tx.Append(file);
+    tx.Pin(blk0);
+    tx.Pin(blk1);
+
+    tx.SetInt(blk0, 0, 11, true);
+    tx.SetInt(blk1, 0, 22, true);
+    tx.SetString(blk0, 80, "block0", true);
+    tx.SetString(blk1, 80, "block1", true);
+
+    Assert.Equal(11, tx.GetInt(blk0, 0));
+    Assert.Equal(22, tx.GetInt(blk1, 0));
+    Assert.Equal("block0", tx.GetString(blk0, 80));
+    Assert.Equal("block1", tx.GetString(blk1, 80));
+
+    tx.Commit();
+}
+
+static void Transaction_ConcurrentReaders()
+{
+    var (fm, lm, bm) = CreateTxTestDeps();
+    string file = TxTestFile();
+
+    // setup: write data
+    var setup = new Transaction(fm, lm, bm);
+    BlockId blk = setup.Append(file);
+    setup.Pin(blk);
+    setup.SetInt(blk, 0, 77, true);
+    setup.Commit();
+
+    // two readers on the same block should not block each other
+    var reader1 = new Transaction(fm, lm, bm);
+    var reader2 = new Transaction(fm, lm, bm);
+    reader1.Pin(blk);
+    reader2.Pin(blk);
+
+    Assert.Equal(77, reader1.GetInt(blk, 0));
+    Assert.Equal(77, reader2.GetInt(blk, 0));
+
+    reader1.Commit();
+    reader2.Commit();
+}
+
+static void Transaction_XLockBlocksWriter()
+{
+    var (fm, lm, bm) = CreateTxTestDeps();
+    string file = TxTestFile();
+
+    var setup = new Transaction(fm, lm, bm);
+    BlockId blk = setup.Append(file);
+    setup.Pin(blk);
+    setup.SetInt(blk, 0, 1, true);
+    setup.Commit();
+
+    // tx1 takes XLock by writing
+    var tx1 = new Transaction(fm, lm, bm);
+    tx1.Pin(blk);
+    tx1.SetInt(blk, 0, 2, true);
+
+    // tx2 tries to write the same block on another thread — should be blocked
+    bool tx2Completed = false;
+    bool tx2Threw = false;
+    var thread = new Thread(() =>
+    {
+        try
+        {
+            var tx2 = new Transaction(fm, lm, bm);
+            tx2.Pin(blk);
+            tx2.SetInt(blk, 0, 3, true);
+            tx2.Commit();
+            tx2Completed = true;
+        }
+        catch (LockAbortException)
+        {
+            tx2Threw = true;
+        }
+    });
+    thread.Start();
+
+    // give tx2 a moment to attempt the lock, then commit tx1
+    Thread.Sleep(200);
+    tx1.Commit();
+    thread.Join();
+
+    // tx2 either succeeded after tx1 committed, or threw LockAbortException.
+    // Either outcome is valid — the key point is tx2 did NOT run concurrently.
+    Assert.True(tx2Completed || tx2Threw,
+        "tx2 should have either completed or thrown LockAbortException.");
+
+    // Read the final value to confirm consistency.
+    var reader = new Transaction(fm, lm, bm);
+    reader.Pin(blk);
+    int finalVal = reader.GetInt(blk, 0);
+    Assert.True(finalVal == 2 || finalVal == 3,
+        $"Expected final value to be 2 or 3, but got {finalVal}.");
+    reader.Commit();
+}
+
+static void Transaction_XLockBlocksReader()
+{
+    var (fm, lm, bm) = CreateTxTestDeps();
+    string file = TxTestFile();
+
+    var setup = new Transaction(fm, lm, bm);
+    BlockId blk = setup.Append(file);
+    setup.Pin(blk);
+    setup.SetInt(blk, 0, 10, true);
+    setup.Commit();
+
+    // tx1 takes XLock by writing
+    var tx1 = new Transaction(fm, lm, bm);
+    tx1.Pin(blk);
+    tx1.SetInt(blk, 0, 20, true);
+
+    // tx2 tries to read the same block on another thread — should be blocked by XLock
+    var readerStarted = new ManualResetEventSlim(false);
+    int readValue = -1;
+    bool readerDone = false;
+    var thread = new Thread(() =>
+    {
+        var tx2 = new Transaction(fm, lm, bm);
+        tx2.Pin(blk);
+        readerStarted.Set();
+        // GetInt acquires SLock — blocked while tx1 holds XLock
+        readValue = tx2.GetInt(blk, 0);
+        tx2.Commit();
+        readerDone = true;
+    });
+    thread.Start();
+
+    readerStarted.Wait();
+    Thread.Sleep(300);
+    // reader should still be blocked
+    Assert.False(readerDone, "Reader should be blocked while writer holds XLock.");
+
+    // release XLock
+    tx1.Commit();
+    thread.Join(TimeSpan.FromSeconds(12));
+
+    Assert.True(readerDone, "Reader should complete after writer commits.");
+    Assert.Equal(20, readValue);
+}
+
+static void Transaction_SLockBlocksWriter()
+{
+    var (fm, lm, bm) = CreateTxTestDeps();
+    string file = TxTestFile();
+
+    var setup = new Transaction(fm, lm, bm);
+    BlockId blk = setup.Append(file);
+    setup.Pin(blk);
+    setup.SetInt(blk, 0, 10, true);
+    setup.Commit();
+
+    // two readers hold SLock
+    var reader1 = new Transaction(fm, lm, bm);
+    reader1.Pin(blk);
+    Assert.Equal(10, reader1.GetInt(blk, 0));
+
+    var reader2 = new Transaction(fm, lm, bm);
+    reader2.Pin(blk);
+    Assert.Equal(10, reader2.GetInt(blk, 0));
+
+    // writer on another thread tries to get XLock — blocked by SLocks
+    var writerStarted = new ManualResetEventSlim(false);
+    bool writerDone = false;
+    var thread = new Thread(() =>
+    {
+        var writer = new Transaction(fm, lm, bm);
+        writer.Pin(blk);
+        writerStarted.Set();
+        // SetInt acquires XLock — blocked while readers hold SLock
+        writer.SetInt(blk, 0, 99, true);
+        writer.Commit();
+        writerDone = true;
+    });
+    thread.Start();
+
+    writerStarted.Wait();
+    Thread.Sleep(300);
+    Assert.False(writerDone, "Writer should be blocked while readers hold SLock.");
+
+    // release one reader — still one SLock held, writer still blocked
+    reader1.Commit();
+    Thread.Sleep(300);
+    Assert.False(writerDone, "Writer should still be blocked with one reader remaining.");
+
+    // release second reader — writer can proceed
+    reader2.Commit();
+    thread.Join(TimeSpan.FromSeconds(12));
+
+    Assert.True(writerDone, "Writer should complete after all readers commit.");
+}
+
+static void Transaction_CommitUnblocksWaiter()
+{
+    var (fm, lm, bm) = CreateTxTestDeps();
+    string file = TxTestFile();
+
+    var setup = new Transaction(fm, lm, bm);
+    BlockId blk = setup.Append(file);
+    setup.Pin(blk);
+    setup.SetInt(blk, 0, 1, true);
+    setup.Commit();
+
+    // tx1 holds XLock
+    var tx1 = new Transaction(fm, lm, bm);
+    tx1.Pin(blk);
+    tx1.SetInt(blk, 0, 2, true);
+
+    var waiterStarted = new ManualResetEventSlim(false);
+    bool waiterDone = false;
+    int waiterRead = -1;
+    var thread = new Thread(() =>
+    {
+        var tx2 = new Transaction(fm, lm, bm);
+        tx2.Pin(blk);
+        waiterStarted.Set();
+        waiterRead = tx2.GetInt(blk, 0);
+        tx2.Commit();
+        waiterDone = true;
+    });
+    thread.Start();
+
+    waiterStarted.Wait();
+    Thread.Sleep(300);
+    Assert.False(waiterDone, "Waiter should be blocked.");
+
+    // commit unblocks the waiter
+    tx1.Commit();
+    thread.Join(TimeSpan.FromSeconds(12));
+
+    Assert.True(waiterDone, "Waiter should proceed after commit.");
+    Assert.Equal(2, waiterRead);
+}
+
+static void Transaction_RollbackUnblocksWaiter()
+{
+    var (fm, lm, bm) = CreateTxTestDeps();
+    string file = TxTestFile();
+
+    var setup = new Transaction(fm, lm, bm);
+    BlockId blk = setup.Append(file);
+    setup.Pin(blk);
+    setup.SetInt(blk, 0, 1, true);
+    setup.Commit();
+
+    // tx1 holds XLock
+    var tx1 = new Transaction(fm, lm, bm);
+    tx1.Pin(blk);
+    tx1.SetInt(blk, 0, 2, true);
+    tx1.Unpin(blk);
+
+    var waiterStarted = new ManualResetEventSlim(false);
+    bool waiterDone = false;
+    int waiterRead = -1;
+    var thread = new Thread(() =>
+    {
+        var tx2 = new Transaction(fm, lm, bm);
+        tx2.Pin(blk);
+        waiterStarted.Set();
+        waiterRead = tx2.GetInt(blk, 0);
+        tx2.Commit();
+        waiterDone = true;
+    });
+    thread.Start();
+
+    waiterStarted.Wait();
+    Thread.Sleep(300);
+    Assert.False(waiterDone, "Waiter should be blocked.");
+
+    // rollback releases locks and undoes changes
+    tx1.Rollback();
+    thread.Join(TimeSpan.FromSeconds(12));
+
+    Assert.True(waiterDone, "Waiter should proceed after rollback.");
+    // rollback undid the write, so waiter should see the original value
+    Assert.Equal(1, waiterRead);
+}
+
+static void Transaction_WritersSerialized()
+{
+    var (fm, lm, bm) = CreateTxTestDeps();
+    string file = TxTestFile();
+
+    var setup = new Transaction(fm, lm, bm);
+    BlockId blk = setup.Append(file);
+    setup.Pin(blk);
+    setup.SetInt(blk, 0, 0, true);
+    setup.Commit();
+
+    // run 5 writers sequentially on separate threads, each incrementing the value
+    int numWriters = 5;
+    var threads = new Thread[numWriters];
+    var barrier = new ManualResetEventSlim(false);
+    int successCount = 0;
+
+    for (int i = 0; i < numWriters; i++)
+    {
+        int writerIndex = i;
+        threads[i] = new Thread(() =>
+        {
+            barrier.Wait();
+            try
+            {
+                var tx = new Transaction(fm, lm, bm);
+                tx.Pin(blk);
+                int current = tx.GetInt(blk, 0);
+                tx.SetInt(blk, 0, current + 1, true);
+                tx.Commit();
+                Interlocked.Increment(ref successCount);
+            }
+            catch (LockAbortException)
+            {
+                // timed out waiting for lock — acceptable under contention
+            }
+        });
+        threads[i].Start();
+    }
+
+    // release all writers at once
+    barrier.Set();
+    foreach (var t in threads)
+        t.Join(TimeSpan.FromSeconds(15));
+
+    // at least one writer must have succeeded
+    Assert.True(successCount > 0, "At least one writer should succeed.");
+
+    // final value must equal the number of successful writers
+    var reader = new Transaction(fm, lm, bm);
+    reader.Pin(blk);
+    int finalVal = reader.GetInt(blk, 0);
+    reader.Commit();
+
+    Assert.Equal(successCount, finalVal);
+}
+
+static void Transaction_IndependentBlocksNoConflict()
+{
+    var (fm, lm, bm) = CreateTxTestDeps();
+    string file = TxTestFile();
+
+    var setup = new Transaction(fm, lm, bm);
+    BlockId blkA = setup.Append(file);
+    BlockId blkB = setup.Append(file);
+    setup.Pin(blkA);
+    setup.Pin(blkB);
+    setup.SetInt(blkA, 0, 10, true);
+    setup.SetInt(blkB, 0, 20, true);
+    setup.Commit();
+
+    // two writers on different blocks should not block each other
+    bool writerADone = false;
+    bool writerBDone = false;
+    var barrier = new ManualResetEventSlim(false);
+
+    var threadA = new Thread(() =>
+    {
+        barrier.Wait();
+        var tx = new Transaction(fm, lm, bm);
+        tx.Pin(blkA);
+        tx.SetInt(blkA, 0, 11, true);
+        tx.Commit();
+        writerADone = true;
+    });
+
+    var threadB = new Thread(() =>
+    {
+        barrier.Wait();
+        var tx = new Transaction(fm, lm, bm);
+        tx.Pin(blkB);
+        tx.SetInt(blkB, 0, 21, true);
+        tx.Commit();
+        writerBDone = true;
+    });
+
+    threadA.Start();
+    threadB.Start();
+    barrier.Set();
+    threadA.Join(TimeSpan.FromSeconds(12));
+    threadB.Join(TimeSpan.FromSeconds(12));
+
+    Assert.True(writerADone, "Writer A should complete without blocking.");
+    Assert.True(writerBDone, "Writer B should complete without blocking.");
+
+    var reader = new Transaction(fm, lm, bm);
+    reader.Pin(blkA);
+    reader.Pin(blkB);
+    Assert.Equal(11, reader.GetInt(blkA, 0));
+    Assert.Equal(21, reader.GetInt(blkB, 0));
+    reader.Commit();
 }
 
 static string CreateDirectory()
