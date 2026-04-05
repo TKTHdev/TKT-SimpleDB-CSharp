@@ -39,6 +39,147 @@ public interface LogRecord
     }
 }
 
+public class CheckpointRecord : LogRecord
+{
+    public CheckpointRecord() { }
+
+    public int op()
+    {
+        return LogRecord.CHECKPOINT;
+    }
+
+    public int txNumber()
+    {
+        return -1;
+    }
+
+    public string toString()
+    {
+        return "<CHECKPOINT>";
+    }
+
+    public void undo(Transaction tx) { }
+
+    public static int writeToLog(LogMgr lm)
+    {
+        byte[] rec = new byte[sizeof(int)];
+        Page p = new Page(rec);
+        p.SetInt(0, LogRecord.CHECKPOINT);
+        return lm.Append(rec);
+    }
+}
+
+public class StartRecord : LogRecord
+{
+    private int txnum;
+
+    public StartRecord(Page p)
+    {
+        int tpos = sizeof(int);
+        txnum = p.GetInt(tpos);
+    }
+
+    public int op()
+    {
+        return LogRecord.START;
+    }
+
+    public int txNumber()
+    {
+        return txnum;
+    }
+
+    public string toString()
+    {
+        return "<START " + txnum + ">";
+    }
+
+    public void undo(Transaction tx) { }
+
+    public static int writeToLog(LogMgr lm, int txnum)
+    {
+        byte[] rec = new byte[2 * sizeof(int)];
+        Page p = new Page(rec);
+        p.SetInt(0, LogRecord.START);
+        p.SetInt(sizeof(int), txnum);
+        return lm.Append(rec);
+    }
+}
+
+public class CommitRecord : LogRecord
+{
+    private int txnum;
+
+    public CommitRecord(Page p)
+    {
+        int tpos = sizeof(int);
+        txnum = p.GetInt(tpos);
+    }
+
+    public int op()
+    {
+        return LogRecord.COMMIT;
+    }
+
+    public int txNumber()
+    {
+        return txnum;
+    }
+
+    public string toString()
+    {
+        return "<COMMIT " + txnum + ">";
+    }
+
+    public void undo(Transaction tx) { }
+
+    public static int writeToLog(LogMgr lm, int txnum)
+    {
+        byte[] rec = new byte[2 * sizeof(int)];
+        Page p = new Page(rec);
+        p.SetInt(0, LogRecord.COMMIT);
+        p.SetInt(sizeof(int), txnum);
+        return lm.Append(rec);
+    }
+}
+
+public class RollbackRecord : LogRecord
+{
+    private int txnum;
+
+    public RollbackRecord(Page p)
+    {
+        int tpos = sizeof(int);
+        txnum = p.GetInt(tpos);
+    }
+
+    public int op()
+    {
+        return LogRecord.ROLLBACK;
+    }
+
+    public int txNumber()
+    {
+        return txnum;
+    }
+
+    public string toString()
+    {
+        return "<ROLLBACK " + txnum + ">";
+    }
+
+    public void undo(Transaction tx) { }
+
+    public static int writeToLog(LogMgr lm, int txnum)
+    {
+        byte[] rec = new byte[2 * sizeof(int)];
+        Page p = new Page(rec);
+        p.SetInt(0, LogRecord.ROLLBACK);
+        p.SetInt(sizeof(int), txnum);
+        return lm.Append(rec);
+    }
+}
+
 public class SetStringRecord : LogRecord
 {
     private int txnum, offset;
