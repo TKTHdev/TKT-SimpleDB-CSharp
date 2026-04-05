@@ -35,7 +35,6 @@ public class ConcurrencyMgr
 
     private bool hasXLock(BlockId blk)
     {
-        string locktype = locks[blk];
-        return locktype != null && locktype.Equals("X");
+        return locks.TryGetValue(blk, out string locktype) && locktype == "X";
     }
 }
