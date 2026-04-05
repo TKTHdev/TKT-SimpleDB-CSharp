@@ -240,10 +240,77 @@ public class SetStringRecord : LogRecord
         Page p = new Page(rec);
         p.SetInt(0, LogRecord.SETSTRING);
         p.SetInt(tpos, txnum);
-        p.SetString(fpos, blk.FileName()); 
+        p.SetString(fpos, blk.FileName());
         p.SetInt(bpos, blk.Number());
         p.SetInt(opos, offset);
         p.SetString(vpos, val);
+        return lm.Append(rec);
+    }
+}
+
+public class SetIntRecord : LogRecord
+{
+    private int txnum, offset;
+    private int val;
+    private BlockId blk;
+
+    public SetIntRecord(Page p)
+    {
+        int tpos = sizeof(int);
+        txnum = p.GetInt(tpos);
+
+        int fpos = tpos + sizeof(int);
+        string filename = p.GetString(fpos);
+
+        int bpos = fpos + Page.MaxLength(filename.Length);
+        int blknum = p.GetInt(bpos);
+        blk = new BlockId(filename, blknum);
+
+        int opos = bpos + sizeof(int);
+        offset = p.GetInt(opos);
+
+        int vpos = opos + sizeof(int);
+        val = p.GetInt(vpos);
+    }
+
+    public int op()
+    {
+        return LogRecord.SETINT;
+    }
+
+    public int txNumber()
+    {
+        return txnum;
+    }
+
+    public string toString()
+    {
+        return "<SETINT " + txnum + " " + blk + " " + offset + " " + val + ">";
+    }
+
+    public void undo(Transaction tx)
+    {
+        tx.Pin(blk);
+        tx.SetInt(blk, offset, val, false);
+        tx.Unpin(blk);
+    }
+
+    public static int writeToLog(LogMgr lm, int txnum, BlockId blk, int offset, int val)
+    {
+        int tpos = sizeof(int);
+        int fpos = tpos + sizeof(int);
+        int bpos = fpos + Page.MaxLength(blk.FileName().Length);
+        int opos = bpos + sizeof(int);
+        int vpos = opos + sizeof(int);
+        int reclen = vpos + sizeof(int);
+        byte[] rec = new byte[reclen];
+        Page p = new Page(rec);
+        p.SetInt(0, LogRecord.SETINT);
+        p.SetInt(tpos, txnum);
+        p.SetString(fpos, blk.FileName());
+        p.SetInt(bpos, blk.Number());
+        p.SetInt(opos, offset);
+        p.SetInt(vpos, val);
         return lm.Append(rec);
     }
 }
