@@ -19,7 +19,7 @@ public class LockTable
             if (hasOtherSLocks(blk))
                throw new LockAbortException();
             int val = getLockVal(blk); 
-            locks[blk] = val;
+            locks[blk] = val + 1;
          }
          catch
          {
@@ -29,8 +29,15 @@ public class LockTable
    }
    public void XLock(BlockId blk)
    {
-      lock(this)
-      {}
+      lock (this)
+      {
+         long  timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+         while(hasOtherSLocks(blk) && !waitingTooLong(timestamp))
+            Monitor.Wait(this, TimeSpan.FromMilliseconds(MAX_TIME));
+         if (hasXLock(blk))
+            throw new LockAbortException();
+         locks[blk] = -1;
+      }
    }
 
    public void Unlock(BlockId blk)
