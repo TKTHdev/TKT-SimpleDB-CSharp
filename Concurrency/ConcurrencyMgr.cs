@@ -16,9 +16,14 @@ public class ConcurrencyMgr
         }
     }
 
-    public void xlock(BlockId blk)
+    public void XLock(BlockId blk)
     {
-        
+        if (!hasXLock(blk))
+        {
+            SLock(blk);
+            locktbl.XLock(blk);
+            locks[blk] = "X";
+        }
     }
 
     public void release()
