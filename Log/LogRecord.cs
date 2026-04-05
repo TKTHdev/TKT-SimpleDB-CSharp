@@ -22,15 +22,15 @@ public interface LogRecord
         switch (p.GetInt(0))
         {
             case CHECKPOINT:
-                return null;
+                return new CheckpointRecord();
             case START:
-                return null;
+                return new StartRecord(p);
             case COMMIT:
-                return null;
+                return new CommitRecord(p);
             case ROLLBACK:
-                return null;
+                return new RollbackRecord(p);
             case SETINT:
-                return null;
+                return new SetIntRecord(p);
             case SETSTRING:
                 return new SetStringRecord(p);
             default:
