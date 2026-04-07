@@ -59,6 +59,14 @@ var tests = new (string Name, Action Body)[]
     ("Transaction rollback releases lock and unblocks waiting tx", Transaction_RollbackUnblocksWaiter),
     ("Transaction writers serialized on same block", Transaction_WritersSerialized),
     ("Transaction locks on different blocks do not interfere", Transaction_IndependentBlocksNoConflict),
+    ("QuiescentCheckpoint blocks new transactions until complete", QuiescentCheckpoint_BlocksNewTransactions),
+    ("QuiescentCheckpoint waits for running transactions to finish", QuiescentCheckpoint_WaitsForRunningTxns),
+    ("QuiescentCheckpoint flushes data and writes checkpoint record", QuiescentCheckpoint_FlushesAndWritesRecord),
+    ("Recovery preserves committed int and string data", Recovery_PreservesCommitted),
+    ("Recovery writes CHECKPOINT record to log", Recovery_WritesCheckpointRecord),
+    ("Recovery preserves data after commit and rollback", Recovery_AfterCommitAndRollback),
+    ("Recovery is idempotent", Recovery_Idempotent),
+    ("Recovery stops scanning at CHECKPOINT record", Recovery_StopsAtCheckpoint),
 };
 
 var failures = new List<string>();
@@ -1308,6 +1316,262 @@ static void Transaction_IndependentBlocksNoConflict()
     Assert.Equal(11, reader.GetInt(blkA, 0));
     Assert.Equal(21, reader.GetInt(blkB, 0));
     reader.Commit();
+}
+
+static void QuiescentCheckpoint_BlocksNewTransactions()
+{
+    var (fm, lm, bm) = CreateTxTestDeps();
+
+    // start a transaction so the checkpoint has something to wait for
+    var tx1 = new Transaction(fm, lm, bm);
+
+    // launch checkpoint on background thread — it will block new txns
+    var ckpt = new Thread(() => Transaction.RunQuiescentCheckpointing(bm, lm));
+    ckpt.IsBackground = true;
+    ckpt.Start();
+
+    // give checkpoint thread time to call StartCheckpoint
+    Thread.Sleep(200);
+
+    // try to create a new transaction on another thread — should be blocked
+    bool newTxStarted = false;
+    var txThread = new Thread(() =>
+    {
+        var tx2 = new Transaction(fm, lm, bm);
+        newTxStarted = true;
+        tx2.Commit();
+    });
+    txThread.Start();
+
+    // wait a bit — tx2 should still be blocked
+    Thread.Sleep(300);
+    Assert.False(newTxStarted, "New transaction should be blocked during quiescent checkpoint.");
+
+    // finish tx1 so checkpoint can complete and reopen the gate
+    tx1.Commit();
+    ckpt.Join(TimeSpan.FromSeconds(5));
+    txThread.Join(TimeSpan.FromSeconds(5));
+
+    Assert.True(newTxStarted, "New transaction should proceed after checkpoint completes.");
+}
+
+static void QuiescentCheckpoint_WaitsForRunningTxns()
+{
+    var (fm, lm, bm) = CreateTxTestDeps();
+    string file = TxTestFile();
+
+    // start a transaction that holds work
+    var tx1 = new Transaction(fm, lm, bm);
+    BlockId blk = tx1.Append(file);
+    tx1.Pin(blk);
+    tx1.SetInt(blk, 0, 42, true);
+
+    bool checkpointDone = false;
+    var ckpt = new Thread(() =>
+    {
+        Transaction.RunQuiescentCheckpointing(bm, lm);
+        checkpointDone = true;
+    });
+    ckpt.IsBackground = true;
+    ckpt.Start();
+
+    // checkpoint should not finish while tx1 is still running
+    Thread.Sleep(300);
+    Assert.False(checkpointDone, "Checkpoint should wait for running transaction to finish.");
+
+    // commit tx1 — checkpoint should now complete
+    tx1.Commit();
+    ckpt.Join(TimeSpan.FromSeconds(5));
+
+    Assert.True(checkpointDone, "Checkpoint should complete after all running transactions finish.");
+}
+
+static void Recovery_PreservesCommitted()
+{
+    var (fm, lm, bm) = CreateTxTestDeps();
+    string file = TxTestFile();
+
+    // tx1: write int and string, then commit
+    var tx1 = new Transaction(fm, lm, bm);
+    BlockId blk = tx1.Append(file);
+    tx1.Pin(blk);
+    tx1.SetInt(blk, 0, 42, true);
+    tx1.SetString(blk, 80, "committed", true);
+    tx1.Commit();
+
+    // run recovery — nothing to undo, committed data should survive
+    var txRecovery = new Transaction(fm, lm, bm);
+    txRecovery.Recover();
+
+    var txRead = new Transaction(fm, lm, bm);
+    txRead.Pin(blk);
+    Assert.Equal(42, txRead.GetInt(blk, 0));
+    Assert.Equal("committed", txRead.GetString(blk, 80));
+    txRead.Commit();
+}
+
+static void Recovery_WritesCheckpointRecord()
+{
+    var (fm, lm, bm) = CreateTxTestDeps();
+    string file = TxTestFile();
+
+    var tx1 = new Transaction(fm, lm, bm);
+    BlockId blk = tx1.Append(file);
+    tx1.Pin(blk);
+    tx1.SetInt(blk, 0, 1, true);
+    tx1.Commit();
+
+    var txRecovery = new Transaction(fm, lm, bm);
+    txRecovery.Recover();
+
+    // scan the log for a CHECKPOINT record
+    bool foundCheckpoint = false;
+    foreach (byte[] bytes in lm.GetEnumerator())
+    {
+        LogRecord rec = LogRecord.CreateLogRecord(bytes);
+        if (rec.Op() == LogRecord.CHECKPOINT)
+        {
+            foundCheckpoint = true;
+            break;
+        }
+    }
+    Assert.True(foundCheckpoint, "Log should contain a CHECKPOINT record after recovery.");
+}
+
+static void Recovery_AfterCommitAndRollback()
+{
+    var (fm, lm, bm) = CreateTxTestDeps();
+    string file = TxTestFile();
+
+    // tx1: write initial values and commit
+    var tx1 = new Transaction(fm, lm, bm);
+    BlockId blk = tx1.Append(file);
+    tx1.Pin(blk);
+    tx1.SetInt(blk, 0, 10, true);
+    tx1.SetInt(blk, 80, 20, true);
+    tx1.Commit();
+
+    // tx2: overwrite offset 0 and commit
+    var tx2 = new Transaction(fm, lm, bm);
+    tx2.Pin(blk);
+    tx2.SetInt(blk, 0, 50, true);
+    tx2.Commit();
+
+    // tx3: overwrite offset 80 and rollback (undo via normal rollback)
+    var tx3 = new Transaction(fm, lm, bm);
+    tx3.Pin(blk);
+    tx3.SetInt(blk, 80, 999, true);
+    tx3.Rollback();
+
+    // recovery should see tx1 committed, tx2 committed, tx3 rolled back
+    var txRecovery = new Transaction(fm, lm, bm);
+    txRecovery.Recover();
+
+    var txRead = new Transaction(fm, lm, bm);
+    txRead.Pin(blk);
+    Assert.Equal(50, txRead.GetInt(blk, 0));   // tx2 committed
+    Assert.Equal(20, txRead.GetInt(blk, 80));   // tx3 rolled back, restored to tx1's value
+    txRead.Commit();
+}
+
+static void Recovery_Idempotent()
+{
+    var (fm, lm, bm) = CreateTxTestDeps();
+    string file = TxTestFile();
+
+    var tx1 = new Transaction(fm, lm, bm);
+    BlockId blk = tx1.Append(file);
+    tx1.Pin(blk);
+    tx1.SetInt(blk, 0, 77, true);
+    tx1.SetString(blk, 80, "stable", true);
+    tx1.Commit();
+
+    // run recovery twice — result should be the same
+    var txR1 = new Transaction(fm, lm, bm);
+    txR1.Recover();
+
+    var txR2 = new Transaction(fm, lm, bm);
+    txR2.Recover();
+
+    var txRead = new Transaction(fm, lm, bm);
+    txRead.Pin(blk);
+    Assert.Equal(77, txRead.GetInt(blk, 0));
+    Assert.Equal("stable", txRead.GetString(blk, 80));
+    txRead.Commit();
+}
+
+static void Recovery_StopsAtCheckpoint()
+{
+    var (fm, lm, bm) = CreateTxTestDeps();
+    string file = TxTestFile();
+
+    // tx1: write and commit
+    var tx1 = new Transaction(fm, lm, bm);
+    BlockId blk = tx1.Append(file);
+    tx1.Pin(blk);
+    tx1.SetInt(blk, 0, 100, true);
+    tx1.Commit();
+
+    // first recovery — writes a CHECKPOINT record
+    var txR1 = new Transaction(fm, lm, bm);
+    txR1.Recover();
+
+    // tx2: write new value after the checkpoint and commit
+    var tx2 = new Transaction(fm, lm, bm);
+    tx2.Pin(blk);
+    tx2.SetInt(blk, 0, 200, true);
+    tx2.Commit();
+
+    // tx3: overwrite and rollback
+    var tx3 = new Transaction(fm, lm, bm);
+    tx3.Pin(blk);
+    tx3.SetInt(blk, 0, 999, true);
+    tx3.Rollback();
+
+    // second recovery — should only scan back to the CHECKPOINT,
+    // see tx2 as committed and tx3 as rolled back
+    var txR2 = new Transaction(fm, lm, bm);
+    txR2.Recover();
+
+    var txRead = new Transaction(fm, lm, bm);
+    txRead.Pin(blk);
+    Assert.Equal(200, txRead.GetInt(blk, 0));
+    txRead.Commit();
+}
+
+static void QuiescentCheckpoint_FlushesAndWritesRecord()
+{
+    var (fm, lm, bm) = CreateTxTestDeps();
+    string file = TxTestFile();
+
+    // write some data and commit
+    var tx1 = new Transaction(fm, lm, bm);
+    BlockId blk = tx1.Append(file);
+    tx1.Pin(blk);
+    tx1.SetInt(blk, 0, 99, true);
+    tx1.Commit();
+
+    // run checkpoint (no running txns, so it completes immediately)
+    Transaction.RunQuiescentCheckpointing(bm, lm);
+
+    // verify checkpoint record was written by scanning the log
+    bool foundCheckpoint = false;
+    foreach (byte[] bytes in lm.GetEnumerator())
+    {
+        LogRecord rec = LogRecord.CreateLogRecord(bytes);
+        if (rec.Op() == LogRecord.CHECKPOINT)
+        {
+            foundCheckpoint = true;
+            break;
+        }
+    }
+    Assert.True(foundCheckpoint, "Log should contain a CHECKPOINT record after quiescent checkpoint.");
+
+    // verify data is readable after checkpoint
+    var tx2 = new Transaction(fm, lm, bm);
+    tx2.Pin(blk);
+    Assert.Equal(99, tx2.GetInt(blk, 0));
+    tx2.Commit();
 }
 
 static string CreateDirectory()
