@@ -12,7 +12,7 @@ namespace DBSharp.Log;
 public class RecoveryMgr
 {
     private LogMgr _lm;
-    private BufferMgr _bm;
+    private IBufferMgr _bm;
     private Transaction _tx;
     private int _txnum;
 
@@ -23,7 +23,7 @@ public class RecoveryMgr
     /// <param name="txnum">The transaction number.</param>
     /// <param name="lm">The log manager.</param>
     /// <param name="bm">The buffer manager.</param>
-    public RecoveryMgr(Transaction tx, int txnum, LogMgr lm, BufferMgr bm)
+    public RecoveryMgr(Transaction tx, int txnum, LogMgr lm, IBufferMgr bm)
     {
         _tx = tx;
         _txnum = txnum;

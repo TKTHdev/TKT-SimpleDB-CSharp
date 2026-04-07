@@ -11,13 +11,13 @@ public class BufferList
 {
     private Dictionary<BlockId, Buffer> _buffers = new Dictionary<BlockId, Buffer>();
     private List<BlockId> _pins = new List<BlockId>();
-    private BufferMgr _bm;
+    private IBufferMgr _bm;
 
     /// <summary>
     /// Creates a new buffer list backed by the given buffer manager.
     /// </summary>
     /// <param name="bm">The buffer manager used for pin/unpin operations.</param>
-    public BufferList(BufferMgr bm)
+    public BufferList(IBufferMgr bm)
     {
         _bm = bm;
     }
