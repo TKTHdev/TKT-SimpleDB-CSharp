@@ -95,11 +95,14 @@ public class RecoveryMgr
 
     private void DoRollback()
     {
+        // iterate in reverse order
         foreach (byte[] bytes in _lm.GetEnumerator())
         {
             LogRecord rec = LogRecord.CreateLogRecord(bytes);
+            // if the record is by the corresponding transaction
             if (rec.TxNumber() == _txnum)
             {
+                // undo until it reaches START record
                 if (rec.Op() == LogRecord.START)
                     return;
                 rec.Undo(_tx);
@@ -110,13 +113,20 @@ public class RecoveryMgr
     private void DoRecover()
     {
         List<int> finishedTxs = new List<int>();
+        // iterate in reverse order
         foreach (byte[] bytes in _lm.GetEnumerator())
         {
             LogRecord rec = LogRecord.CreateLogRecord(bytes);
+            // iterate until it reaches CHECKPOINT record
+            // because all the updates before the CHECKPOINT is guaranteed 
+            // to have been written to the data file
             if (rec.Op() == LogRecord.CHECKPOINT)
                 return;
+            // if it is a completed transaction, it doesn't need to be undoed 
+            // since it is not written to the data file
             if (rec.Op() == LogRecord.COMMIT || rec.Op() == LogRecord.ROLLBACK)
                 finishedTxs.Add(rec.TxNumber());
+            // undo if it is not completed transaction
             else if (!finishedTxs.Contains(rec.TxNumber()))
                 rec.Undo(_tx);
         }
