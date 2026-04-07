@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using DBSharp.Buffers;
 using DBSharp.File;
 using DBSharp.Concurrency;
@@ -21,6 +22,23 @@ public class Transaction
     private int _txnum;
     private BufferList _myBuffers;
     private static readonly object _locker = new object();
+    private static readonly ConcurrentDictionary<int, bool> _runningTxns = new();
+    private static readonly ManualResetEventSlim _checkpointGate = new(initialState: true); // signaled = not checkpointing
+
+    /// <summary>
+    /// Returns a snapshot of all currently running transaction numbers.
+    /// </summary>
+    public static IReadOnlyCollection<int> RunningTxns => _runningTxns.Keys.ToList().AsReadOnly();
+
+    /// <summary>
+    /// Signals that a checkpoint has started. New transactions will block until EndCheckpoint is called.
+    /// </summary>
+    public static void StartCheckpoint() => _checkpointGate.Reset();
+
+    /// <summary>
+    /// Signals that the checkpoint has finished. Blocked transactions may now proceed.
+    /// </summary>
+    public static void EndCheckpoint() => _checkpointGate.Set();
 
     /// <summary>
     /// Creates a new transaction with a unique transaction number, initializing
@@ -31,11 +49,12 @@ public class Transaction
     /// <param name="bm">The buffer manager for buffer pool access.</param>
     public Transaction(FileMgr fm, LogMgr lm, IBufferMgr bm)
     {
+        // wait when checkpointing is running
+        _checkpointGate.Wait();
         _fm = fm;
         _bm = bm;
-        // _txnum is a static field so it is globally incremented 
-        // every time new transaction is initialized
         _txnum = NextTxNumber();
+        _runningTxns.TryAdd(_txnum, true);
         _recoveryMgr = new RecoveryMgr(this, _txnum, lm, bm);
         _concurMgr = new ConcurrencyMgr();
         _myBuffers = new BufferList(bm);
@@ -49,6 +68,7 @@ public class Transaction
         _recoveryMgr.Commit();
         _concurMgr.Release();
         _myBuffers.UnpinAll();
+        _runningTxns.TryRemove(_txnum, out _);
         Console.WriteLine("transaction" + _txnum + " committed");
     }
 
@@ -60,6 +80,7 @@ public class Transaction
         _recoveryMgr.Rollback();
         _concurMgr.Release();
         _myBuffers.UnpinAll();
+        _runningTxns.TryRemove(_txnum, out _);
         Console.WriteLine("transaction" + _txnum + " rolled back");
     }
 
@@ -161,6 +182,8 @@ public class Transaction
     /// <param name="filename">The name of the file.</param>
     public int Size(string filename)
     {
+        // locking the EOF block 
+        // to avoid phantoms
         BlockId dummyBlk = new BlockId(filename, END_OF_FILE);
         _concurMgr.SLock(dummyBlk);
         return _fm.Length(filename);
@@ -174,6 +197,8 @@ public class Transaction
     /// <returns>The <see cref="BlockId"/> of the newly appended block.</returns>
     public BlockId Append(string filename)
     {
+        // locking the EOF block 
+        // to avoid phantoms
         BlockId dummyBlk = new BlockId(filename, END_OF_FILE);
         _concurMgr.XLock(dummyBlk);
         return _fm.Append(filename);
@@ -202,6 +227,37 @@ public class Transaction
             _nextTxNum++;
             Console.WriteLine("new transaction: " + _nextTxNum);
             return _nextTxNum;
+        }
+    }
+
+    /// <summary>
+    /// Runs a quiescent checkpoint: blocks new transactions, waits for all running
+    /// transactions to finish, flushes all modified buffers, and writes a CHECKPOINT
+    /// log record.
+    /// </summary>
+    /// <param name="bm">The buffer manager used to flush dirty buffers.</param>
+    /// <param name="lm">The log manager used to write the checkpoint record.</param>
+    public static void RunQuiescentCheckpointing(IBufferMgr bm, LogMgr lm)
+    {
+        // stop accepting new transactions
+        StartCheckpoint();
+        try
+        {
+            // wait for existing transactions to finish
+            while (!_runningTxns.IsEmpty)
+            {
+                Thread.Sleep(1);
+            }
+            // flush all modified buffers
+            bm.FlushAll();
+            // append a quiescent checkpoint record to the log and flush it to disk
+            int lsn = CheckpointRecord.WriteToLog(lm);
+            lm.Flush(lsn);
+        }
+        finally
+        {
+            // start accepting new transactions
+            EndCheckpoint();
         }
     }
 }
