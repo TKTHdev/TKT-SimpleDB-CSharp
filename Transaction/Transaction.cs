@@ -16,7 +16,7 @@ public class Transaction
     private static int END_OF_FILE = -1;
     private RecoveryMgr _recoveryMgr;
     private ConcurrencyMgr _concurMgr;
-    private BufferMgr _bm;
+    private IBufferMgr _bm;
     private FileMgr _fm;
     private int _txnum;
     private BufferList _myBuffers;
@@ -29,7 +29,7 @@ public class Transaction
     /// <param name="fm">The file manager for disk I/O.</param>
     /// <param name="lm">The log manager for WAL operations.</param>
     /// <param name="bm">The buffer manager for buffer pool access.</param>
-    public Transaction(FileMgr fm, LogMgr lm, BufferMgr bm)
+    public Transaction(FileMgr fm, LogMgr lm, IBufferMgr bm)
     {
         _fm = fm;
         _bm = bm;
