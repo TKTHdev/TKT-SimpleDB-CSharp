@@ -1,12 +1,21 @@
 using DBSharp.File;
 
-namespace DBSharp.Lock;
+namespace DBSharp.Concurrency;
 
+/// <summary>
+/// Per-transaction concurrency manager that tracks which locks the transaction holds
+/// and delegates to the global <see cref="LockTable"/>. Ensures that an exclusive lock
+/// is always preceded by a shared lock (lock upgrading).
+/// </summary>
 public class ConcurrencyMgr
 {
     private static LockTable _lockTable = new LockTable();
     private Dictionary<BlockId, string> _locks = new Dictionary<BlockId, string>();
 
+    /// <summary>
+    /// Acquires a shared lock on the specified block if one is not already held.
+    /// </summary>
+    /// <param name="blk">The block to lock.</param>
     public void SLock(BlockId blk)
     {
         if (!_locks.ContainsKey(blk))
@@ -16,6 +25,10 @@ public class ConcurrencyMgr
         }
     }
 
+    /// <summary>
+    /// Acquires an exclusive lock on the specified block, upgrading from a shared lock if needed.
+    /// </summary>
+    /// <param name="blk">The block to lock exclusively.</param>
     public void XLock(BlockId blk)
     {
         if (!HasXLock(blk))
@@ -26,6 +39,9 @@ public class ConcurrencyMgr
         }
     }
 
+    /// <summary>
+    /// Releases all locks held by this transaction.
+    /// </summary>
     public void Release()
     {
         foreach (BlockId blk in _locks.Keys)

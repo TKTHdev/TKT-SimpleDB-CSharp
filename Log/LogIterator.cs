@@ -4,6 +4,11 @@ using DBSharp.File;
 
 namespace DBSharp.Log;
 
+/// <summary>
+/// Iterates over log records in reverse chronological order, starting from the
+/// most recent block and moving backward through earlier blocks. Each record is
+/// returned as a raw byte array.
+/// </summary>
 class LogIterator : IEnumerable<byte[]>, IEnumerator<byte[]>
 {
     private FileMgr _fm;
@@ -11,6 +16,12 @@ class LogIterator : IEnumerable<byte[]>, IEnumerator<byte[]>
     private Page _p;
     private int _currentPos;
     private int _boundary;
+
+    /// <summary>
+    /// Creates a new log iterator starting from the given block.
+    /// </summary>
+    /// <param name="fm">The file manager for reading blocks.</param>
+    /// <param name="blk">The block to start iterating from (typically the current log block).</param>
     public LogIterator(FileMgr fm, BlockId blk)
     {
         _fm = fm;
@@ -21,15 +32,19 @@ class LogIterator : IEnumerable<byte[]>, IEnumerator<byte[]>
     }
     private void MoveToBlock(BlockId blk)
     {
-        // in spite of its name, 
+        // in spite of its name,
         // it just loads the selected block to the page.
         // that's it.
         _fm.Read(blk, _p);
         _boundary = _p.GetInt(0);
         _currentPos = _boundary;
     }
+
+    /// <inheritdoc/>
     public byte[] Current { get; private set; } = Array.Empty<byte>();
     object IEnumerator.Current => Current;
+
+    /// <inheritdoc/>
     public bool MoveNext()
     {
         if (_currentPos >= _fm.BlockSize() && _blk.Number() <= 0)
@@ -45,8 +60,14 @@ class LogIterator : IEnumerable<byte[]>, IEnumerator<byte[]>
         _currentPos += sizeof(int) + Current.Length;
         return true;
     }
+
+    /// <inheritdoc/>
     public void Reset() { }
+
+    /// <inheritdoc/>
     public void Dispose() { }
+
+    /// <inheritdoc/>
     public IEnumerator<byte[]> GetEnumerator() => this;
     IEnumerator IEnumerable.GetEnumerator() => this;
 }
