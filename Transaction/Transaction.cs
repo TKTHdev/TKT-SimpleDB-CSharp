@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using DBSharp.Buffers;
 using DBSharp.File;
 using DBSharp.Concurrency;
@@ -21,6 +22,12 @@ public class Transaction
     private int _txnum;
     private BufferList _myBuffers;
     private static readonly object _locker = new object();
+    private static readonly ConcurrentDictionary<int, bool> _runningTxns = new();
+
+    /// <summary>
+    /// Returns a snapshot of all currently running transaction numbers.
+    /// </summary>
+    public static IReadOnlyCollection<int> RunningTxns => _runningTxns.Keys.ToList().AsReadOnly();
 
     /// <summary>
     /// Creates a new transaction with a unique transaction number, initializing
@@ -36,6 +43,7 @@ public class Transaction
         // _txnum is a static field so it is globally incremented 
         // every time new transaction is initialized
         _txnum = NextTxNumber();
+        _runningTxns.TryAdd(_txnum, true);
         _recoveryMgr = new RecoveryMgr(this, _txnum, lm, bm);
         _concurMgr = new ConcurrencyMgr();
         _myBuffers = new BufferList(bm);
@@ -49,6 +57,7 @@ public class Transaction
         _recoveryMgr.Commit();
         _concurMgr.Release();
         _myBuffers.UnpinAll();
+        _runningTxns.TryRemove(_txnum, out _);
         Console.WriteLine("transaction" + _txnum + " committed");
     }
 
@@ -60,6 +69,7 @@ public class Transaction
         _recoveryMgr.Rollback();
         _concurMgr.Release();
         _myBuffers.UnpinAll();
+        _runningTxns.TryRemove(_txnum, out _);
         Console.WriteLine("transaction" + _txnum + " rolled back");
     }
 
