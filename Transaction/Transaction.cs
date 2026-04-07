@@ -161,6 +161,8 @@ public class Transaction
     /// <param name="filename">The name of the file.</param>
     public int Size(string filename)
     {
+        // locking the EOF block 
+        // to avoid phantoms
         BlockId dummyBlk = new BlockId(filename, END_OF_FILE);
         _concurMgr.SLock(dummyBlk);
         return _fm.Length(filename);
@@ -174,6 +176,8 @@ public class Transaction
     /// <returns>The <see cref="BlockId"/> of the newly appended block.</returns>
     public BlockId Append(string filename)
     {
+        // locking the EOF block 
+        // to avoid phantoms
         BlockId dummyBlk = new BlockId(filename, END_OF_FILE);
         _concurMgr.XLock(dummyBlk);
         return _fm.Append(filename);
