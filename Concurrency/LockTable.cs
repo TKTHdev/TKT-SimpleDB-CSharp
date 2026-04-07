@@ -1,16 +1,25 @@
 using DBSharp.File;
 
-namespace DBSharp.Lock;
-/*
- * Concurrency manager will always obtain an SLock on the block before requesting the Xlock
- * So a value higher than 1 indicates that some other transaction also has a lock on the block
- */
+namespace DBSharp.Concurrency;
 
+/// <summary>
+/// Global lock table that manages shared and exclusive locks on blocks.
+/// Lock values are stored as integers: positive values represent the number of
+/// shared locks held, and -1 represents an exclusive lock.
+/// The concurrency manager always acquires an SLock before requesting an XLock,
+/// so a value greater than 1 indicates that other transactions also hold shared locks.
+/// </summary>
 public class LockTable
 {
     private static readonly long MAX_TIME = 10000; // 10 seconds
     private Dictionary<BlockId, int> _locks = new Dictionary<BlockId, int>();
 
+    /// <summary>
+    /// Acquires a shared lock on the specified block. Waits if an exclusive lock is held,
+    /// and throws <see cref="LockAbortException"/> if the wait times out.
+    /// </summary>
+    /// <param name="blk">The block to lock.</param>
+    /// <exception cref="LockAbortException">Thrown if the lock cannot be acquired within the timeout.</exception>
     public void SLock(BlockId blk)
     {
         lock (this)
@@ -31,6 +40,13 @@ public class LockTable
             }
         }
     }
+
+    /// <summary>
+    /// Acquires an exclusive lock on the specified block. Waits if other transactions
+    /// hold shared locks, and throws <see cref="LockAbortException"/> if the wait times out.
+    /// </summary>
+    /// <param name="blk">The block to lock exclusively.</param>
+    /// <exception cref="LockAbortException">Thrown if the lock cannot be acquired within the timeout.</exception>
     public void XLock(BlockId blk)
     {
         lock (this)
@@ -44,6 +60,11 @@ public class LockTable
         }
     }
 
+    /// <summary>
+    /// Releases one lock on the specified block. If this was the last shared lock (or an
+    /// exclusive lock), the entry is removed and a waiting thread is notified.
+    /// </summary>
+    /// <param name="blk">The block to unlock.</param>
     public void Unlock(BlockId blk)
     {
         lock (this)

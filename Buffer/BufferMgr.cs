@@ -3,12 +3,22 @@ using DBSharp.Log;
 
 namespace DBSharp.Buffers;
 
+/// <summary>
+/// Manages a fixed-size buffer pool using a naive replacement strategy that picks
+/// the first unpinned buffer found.
+/// </summary>
 public class BufferMgr
 {
     private Buffer[] _bufferpool;
     private int _numAvailable;
     private static readonly long MAX_TIME = 10000;//10 seconds
 
+    /// <summary>
+    /// Creates a buffer manager with the specified number of buffer slots.
+    /// </summary>
+    /// <param name="fm">The file manager for disk I/O.</param>
+    /// <param name="lm">The log manager for WAL operations.</param>
+    /// <param name="numbuffs">The number of buffers in the pool.</param>
     public BufferMgr(FileMgr fm, LogMgr lm, int numbuffs)
     {
         _bufferpool = new Buffer[numbuffs];
@@ -18,6 +28,9 @@ public class BufferMgr
             _bufferpool[i] = new Buffer(fm, lm);
     }
 
+    /// <summary>
+    /// Returns the number of unpinned (available) buffers.
+    /// </summary>
     public int Available()
     {
         lock (this)
@@ -26,11 +39,15 @@ public class BufferMgr
         }
     }
 
+    /// <summary>
+    /// Flushes all dirty buffers that were modified by the specified transaction.
+    /// </summary>
+    /// <param name="txnum">The transaction number whose buffers should be flushed.</param>
     public void FlushAll(int txnum)
     {
         lock (this)
         {
-            // flush all the buffer in buffer pool 
+            // flush all the buffer in buffer pool
             // with corresponding txn id
             foreach (Buffer buff in _bufferpool)
             {
@@ -40,6 +57,14 @@ public class BufferMgr
         }
     }
 
+    /// <summary>
+    /// Pins the buffer holding the specified block. If the block is not already in the pool,
+    /// an unpinned buffer is chosen for replacement. Blocks until a buffer is available or
+    /// the wait times out, throwing <see cref="BufferAbortException"/>.
+    /// </summary>
+    /// <param name="blk">The block to pin.</param>
+    /// <returns>The pinned buffer.</returns>
+    /// <exception cref="BufferAbortException">Thrown if no buffer becomes available within the timeout.</exception>
     public Buffer Pin(BlockId blk)
     {
         lock (this)
@@ -47,7 +72,7 @@ public class BufferMgr
             long timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             Buffer buff = TryToPin(blk);
             // wait until it can acquire lock
-            // MAX_TIME is the maximum time it waits 
+            // MAX_TIME is the maximum time it waits
             while (buff == null && !WaitingTooLong(timestamp))
             {
                 Monitor.Wait(this, TimeSpan.FromMilliseconds(MAX_TIME));
@@ -113,6 +138,11 @@ public class BufferMgr
         return null;
     }
 
+    /// <summary>
+    /// Unpins the given buffer. If the buffer becomes fully unpinned, it is made available
+    /// for replacement and all waiting threads are notified.
+    /// </summary>
+    /// <param name="buff">The buffer to unpin.</param>
     public void Unpin(Buffer buff)
     {
         lock (this)
@@ -127,10 +157,15 @@ public class BufferMgr
         }
     }
 }
+
+/// <summary>
+/// Buffer manager that uses a FIFO (First-In, First-Out) replacement strategy.
+/// Evicts the buffer whose block was loaded into the pool earliest.
+/// </summary>
 public class FIFOBufferMgr
 {
     private Buffer[] _bufferpool;
-    // sequence number of each time the buffer was read in 
+    // sequence number of each time the buffer was read in
     // updated inside ChooseUnpinnedBuffer
     private long[] _seqReadIn;
     // this is incremented everytime it reads a block from disk to buffer
@@ -138,6 +173,12 @@ public class FIFOBufferMgr
     private int _numAvailable;
     private static readonly long MAX_TIME = 10000;//10 seconds
 
+    /// <summary>
+    /// Creates a FIFO buffer manager with the specified number of buffer slots.
+    /// </summary>
+    /// <param name="fm">The file manager for disk I/O.</param>
+    /// <param name="lm">The log manager for WAL operations.</param>
+    /// <param name="numbuffs">The number of buffers in the pool.</param>
     public FIFOBufferMgr(FileMgr fm, LogMgr lm, int numbuffs)
     {
         _bufferpool = new Buffer[numbuffs];
@@ -152,6 +193,9 @@ public class FIFOBufferMgr
         }
     }
 
+    /// <summary>
+    /// Returns the number of unpinned (available) buffers.
+    /// </summary>
     public int Available()
     {
         lock (this)
@@ -160,11 +204,15 @@ public class FIFOBufferMgr
         }
     }
 
+    /// <summary>
+    /// Flushes all dirty buffers that were modified by the specified transaction.
+    /// </summary>
+    /// <param name="txnum">The transaction number whose buffers should be flushed.</param>
     public void FlushAll(int txnum)
     {
         lock (this)
         {
-            // flush all the buffer in buffer pool 
+            // flush all the buffer in buffer pool
             // with corresponding txn id
             foreach (Buffer buff in _bufferpool)
             {
@@ -174,6 +222,12 @@ public class FIFOBufferMgr
         }
     }
 
+    /// <summary>
+    /// Pins the buffer holding the specified block, using FIFO eviction if needed.
+    /// </summary>
+    /// <param name="blk">The block to pin.</param>
+    /// <returns>The pinned buffer.</returns>
+    /// <exception cref="BufferAbortException">Thrown if no buffer becomes available within the timeout.</exception>
     public Buffer Pin(BlockId blk)
     {
         lock (this)
@@ -181,7 +235,7 @@ public class FIFOBufferMgr
             long timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             Buffer buff = TryToPin(blk);
             // wait until it can acquire lock
-            // MAX_TIME is the maximum time it waits 
+            // MAX_TIME is the maximum time it waits
             while (buff == null && !WaitingTooLong(timestamp))
             {
                 Monitor.Wait(this, TimeSpan.FromMilliseconds(MAX_TIME));
@@ -203,8 +257,8 @@ public class FIFOBufferMgr
         // then search for unpinned buffer to evict
         if (buff == null)
         {
-            // we need this later 
-            // to update _seqReadIn[] 
+            // we need this later
+            // to update _seqReadIn[]
             int bufindex = -1;
             // find unpinned buffer
             (buff, bufindex) = ChooseUnpinnedBuffer();
@@ -267,6 +321,10 @@ public class FIFOBufferMgr
         return (candidate >= 0) ? (_bufferpool[candidate], candidate) : (null, -1);
     }
 
+    /// <summary>
+    /// Unpins the given buffer and notifies waiting threads if it becomes fully unpinned.
+    /// </summary>
+    /// <param name="buff">The buffer to unpin.</param>
     public void Unpin(Buffer buff)
     {
         lock (this)
@@ -282,6 +340,10 @@ public class FIFOBufferMgr
     }
 }
 
+/// <summary>
+/// Buffer manager that uses an LRU (Least Recently Used) replacement strategy.
+/// Evicts the unpinned buffer that was unpinned the longest ago.
+/// </summary>
 public class LRUBufferMgr
 {
     private Buffer[] _bufferpool;
@@ -290,6 +352,12 @@ public class LRUBufferMgr
     private int _numAvailable;
     private static readonly long MAX_TIME = 10000;//10 seconds
 
+    /// <summary>
+    /// Creates an LRU buffer manager with the specified number of buffer slots.
+    /// </summary>
+    /// <param name="fm">The file manager for disk I/O.</param>
+    /// <param name="lm">The log manager for WAL operations.</param>
+    /// <param name="numbuffs">The number of buffers in the pool.</param>
     public LRUBufferMgr(FileMgr fm, LogMgr lm, int numbuffs)
     {
         _bufferpool = new Buffer[numbuffs];
@@ -305,6 +373,9 @@ public class LRUBufferMgr
 
     }
 
+    /// <summary>
+    /// Returns the number of unpinned (available) buffers.
+    /// </summary>
     public int Available()
     {
         lock (this)
@@ -313,11 +384,15 @@ public class LRUBufferMgr
         }
     }
 
+    /// <summary>
+    /// Flushes all dirty buffers that were modified by the specified transaction.
+    /// </summary>
+    /// <param name="txnum">The transaction number whose buffers should be flushed.</param>
     public void FlushAll(int txnum)
     {
         lock (this)
         {
-            // flush all the buffer in buffer pool 
+            // flush all the buffer in buffer pool
             // with corresponding txn id
             foreach (Buffer buff in _bufferpool)
             {
@@ -327,6 +402,12 @@ public class LRUBufferMgr
         }
     }
 
+    /// <summary>
+    /// Pins the buffer holding the specified block, using LRU eviction if needed.
+    /// </summary>
+    /// <param name="blk">The block to pin.</param>
+    /// <returns>The pinned buffer.</returns>
+    /// <exception cref="BufferAbortException">Thrown if no buffer becomes available within the timeout.</exception>
     public Buffer Pin(BlockId blk)
     {
         lock (this)
@@ -334,7 +415,7 @@ public class LRUBufferMgr
             long timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             Buffer buff = TryToPin(blk);
             // wait until it can acquire lock
-            // MAX_TIME is the maximum time it waits 
+            // MAX_TIME is the maximum time it waits
             while (buff == null && !WaitingTooLong(timestamp))
             {
                 Monitor.Wait(this, TimeSpan.FromMilliseconds(MAX_TIME));
@@ -417,6 +498,11 @@ public class LRUBufferMgr
         return (candidate >= 0) ? _bufferpool[candidate] : null;
     }
 
+    /// <summary>
+    /// Unpins the given buffer, records the unpin sequence for LRU tracking,
+    /// and notifies waiting threads if it becomes fully unpinned.
+    /// </summary>
+    /// <param name="buff">The buffer to unpin.</param>
     public void Unpin(Buffer buff)
     {
         lock (this)
@@ -441,6 +527,10 @@ public class LRUBufferMgr
     }
 }
 
+/// <summary>
+/// Buffer manager that uses a clock (second-chance) replacement strategy.
+/// Cycles through buffers in round-robin order, choosing the first unpinned one.
+/// </summary>
 public class ClockBufferMgr
 {
     private Buffer[] _bufferpool;
@@ -448,6 +538,12 @@ public class ClockBufferMgr
     private static readonly long MAX_TIME = 10000;//10 seconds
     private int _clock = 0;
 
+    /// <summary>
+    /// Creates a clock buffer manager with the specified number of buffer slots.
+    /// </summary>
+    /// <param name="fm">The file manager for disk I/O.</param>
+    /// <param name="lm">The log manager for WAL operations.</param>
+    /// <param name="numbuffs">The number of buffers in the pool.</param>
     public ClockBufferMgr(FileMgr fm, LogMgr lm, int numbuffs)
     {
         _bufferpool = new Buffer[numbuffs];
@@ -457,6 +553,9 @@ public class ClockBufferMgr
             _bufferpool[i] = new Buffer(fm, lm);
     }
 
+    /// <summary>
+    /// Returns the number of unpinned (available) buffers.
+    /// </summary>
     public int Available()
     {
         lock (this)
@@ -465,11 +564,15 @@ public class ClockBufferMgr
         }
     }
 
+    /// <summary>
+    /// Flushes all dirty buffers that were modified by the specified transaction.
+    /// </summary>
+    /// <param name="txnum">The transaction number whose buffers should be flushed.</param>
     public void FlushAll(int txnum)
     {
         lock (this)
         {
-            // flush all the buffer in buffer pool 
+            // flush all the buffer in buffer pool
             // with corresponding txn id
             foreach (Buffer buff in _bufferpool)
             {
@@ -479,6 +582,12 @@ public class ClockBufferMgr
         }
     }
 
+    /// <summary>
+    /// Pins the buffer holding the specified block, using clock eviction if needed.
+    /// </summary>
+    /// <param name="blk">The block to pin.</param>
+    /// <returns>The pinned buffer.</returns>
+    /// <exception cref="BufferAbortException">Thrown if no buffer becomes available within the timeout.</exception>
     public Buffer Pin(BlockId blk)
     {
         lock (this)
@@ -486,7 +595,7 @@ public class ClockBufferMgr
             long timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             Buffer buff = TryToPin(blk);
             // wait until it can acquire lock
-            // MAX_TIME is the maximum time it waits 
+            // MAX_TIME is the maximum time it waits
             while (buff == null && !WaitingTooLong(timestamp))
             {
                 Monitor.Wait(this, TimeSpan.FromMilliseconds(MAX_TIME));
@@ -557,6 +666,10 @@ public class ClockBufferMgr
         return null;
     }
 
+    /// <summary>
+    /// Unpins the given buffer and notifies waiting threads if it becomes fully unpinned.
+    /// </summary>
+    /// <param name="buff">The buffer to unpin.</param>
     public void Unpin(Buffer buff)
     {
         lock (this)
@@ -572,14 +685,22 @@ public class ClockBufferMgr
     }
 }
 
-// buffer manager with a page replacement strategy
-// that chooses unmodified pages over modified ones.
+/// <summary>
+/// Buffer manager that prefers to evict clean (unmodified) pages over dirty ones,
+/// reducing the number of disk writes needed during replacement.
+/// </summary>
 public class CleanFirstBufferMgr
 {
     private Buffer[] _bufferpool;
     private int _numAvailable;
     private static readonly long MAX_TIME = 10000;//10 seconds
 
+    /// <summary>
+    /// Creates a clean-first buffer manager with the specified number of buffer slots.
+    /// </summary>
+    /// <param name="fm">The file manager for disk I/O.</param>
+    /// <param name="lm">The log manager for WAL operations.</param>
+    /// <param name="numbuffs">The number of buffers in the pool.</param>
     public CleanFirstBufferMgr(FileMgr fm, LogMgr lm, int numbuffs)
     {
         _bufferpool = new Buffer[numbuffs];
@@ -589,6 +710,9 @@ public class CleanFirstBufferMgr
             _bufferpool[i] = new Buffer(fm, lm);
     }
 
+    /// <summary>
+    /// Returns the number of unpinned (available) buffers.
+    /// </summary>
     public int Available()
     {
         lock (this)
@@ -597,11 +721,15 @@ public class CleanFirstBufferMgr
         }
     }
 
+    /// <summary>
+    /// Flushes all dirty buffers that were modified by the specified transaction.
+    /// </summary>
+    /// <param name="txnum">The transaction number whose buffers should be flushed.</param>
     public void FlushAll(int txnum)
     {
         lock (this)
         {
-            // flush all the buffer in buffer pool 
+            // flush all the buffer in buffer pool
             // with corresponding txn id
             foreach (Buffer buff in _bufferpool)
             {
@@ -611,6 +739,12 @@ public class CleanFirstBufferMgr
         }
     }
 
+    /// <summary>
+    /// Pins the buffer holding the specified block, preferring clean-page eviction.
+    /// </summary>
+    /// <param name="blk">The block to pin.</param>
+    /// <returns>The pinned buffer.</returns>
+    /// <exception cref="BufferAbortException">Thrown if no buffer becomes available within the timeout.</exception>
     public Buffer Pin(BlockId blk)
     {
         lock (this)
@@ -618,7 +752,7 @@ public class CleanFirstBufferMgr
             long timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             Buffer buff = TryToPin(blk);
             // wait until it can acquire lock
-            // MAX_TIME is the maximum time it waits 
+            // MAX_TIME is the maximum time it waits
             while (buff == null && !WaitingTooLong(timestamp))
             {
                 Monitor.Wait(this, TimeSpan.FromMilliseconds(MAX_TIME));
@@ -691,6 +825,10 @@ public class CleanFirstBufferMgr
         return null;
     }
 
+    /// <summary>
+    /// Unpins the given buffer and notifies waiting threads if it becomes fully unpinned.
+    /// </summary>
+    /// <param name="buff">The buffer to unpin.</param>
     public void Unpin(Buffer buff)
     {
         lock (this)
@@ -706,14 +844,23 @@ public class CleanFirstBufferMgr
     }
 }
 
-// buffer manager with a page replacement strategy
-// that chooses the modified page having the lowest LSN
+/// <summary>
+/// Buffer manager that evicts the dirty page with the lowest LSN first, minimizing
+/// the amount of log that must be flushed before write-back. Clean pages are preferred
+/// over dirty ones.
+/// </summary>
 public class LSNBasedBufferMgr
 {
     private Buffer[] _bufferpool;
     private int _numAvailable;
     private static readonly long MAX_TIME = 10000;//10 seconds
 
+    /// <summary>
+    /// Creates an LSN-based buffer manager with the specified number of buffer slots.
+    /// </summary>
+    /// <param name="fm">The file manager for disk I/O.</param>
+    /// <param name="lm">The log manager for WAL operations.</param>
+    /// <param name="numbuffs">The number of buffers in the pool.</param>
     public LSNBasedBufferMgr(FileMgr fm, LogMgr lm, int numbuffs)
     {
         _bufferpool = new Buffer[numbuffs];
@@ -723,6 +870,9 @@ public class LSNBasedBufferMgr
             _bufferpool[i] = new Buffer(fm, lm);
     }
 
+    /// <summary>
+    /// Returns the number of unpinned (available) buffers.
+    /// </summary>
     public int Available()
     {
         lock (this)
@@ -731,11 +881,15 @@ public class LSNBasedBufferMgr
         }
     }
 
+    /// <summary>
+    /// Flushes all dirty buffers that were modified by the specified transaction.
+    /// </summary>
+    /// <param name="txnum">The transaction number whose buffers should be flushed.</param>
     public void FlushAll(int txnum)
     {
         lock (this)
         {
-            // flush all the buffer in buffer pool 
+            // flush all the buffer in buffer pool
             // with corresponding txn id
             foreach (Buffer buff in _bufferpool)
             {
@@ -745,6 +899,12 @@ public class LSNBasedBufferMgr
         }
     }
 
+    /// <summary>
+    /// Pins the buffer holding the specified block, using LSN-based eviction if needed.
+    /// </summary>
+    /// <param name="blk">The block to pin.</param>
+    /// <returns>The pinned buffer.</returns>
+    /// <exception cref="BufferAbortException">Thrown if no buffer becomes available within the timeout.</exception>
     public Buffer Pin(BlockId blk)
     {
         lock (this)
@@ -752,7 +912,7 @@ public class LSNBasedBufferMgr
             long timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             Buffer buff = TryToPin(blk);
             // wait until it can acquire lock
-            // MAX_TIME is the maximum time it waits 
+            // MAX_TIME is the maximum time it waits
             while (buff == null && !WaitingTooLong(timestamp))
             {
                 Monitor.Wait(this, TimeSpan.FromMilliseconds(MAX_TIME));
@@ -835,6 +995,10 @@ public class LSNBasedBufferMgr
         return bufWithLowestLSN;
     }
 
+    /// <summary>
+    /// Unpins the given buffer and notifies waiting threads if it becomes fully unpinned.
+    /// </summary>
+    /// <param name="buff">The buffer to unpin.</param>
     public void Unpin(Buffer buff)
     {
         lock (this)
@@ -850,6 +1014,10 @@ public class LSNBasedBufferMgr
     }
 }
 
+/// <summary>
+/// Buffer manager that maintains a hash table mapping <see cref="BlockId"/> to buffers
+/// for O(1) lookup of blocks already in the pool.
+/// </summary>
 public class BufferMgrWithBufferHashTable
 {
     private Buffer[] _bufferpool;
@@ -857,6 +1025,12 @@ public class BufferMgrWithBufferHashTable
     private static readonly long MAX_TIME = 10000;//10 seconds
     private Dictionary<BlockId, Buffer> _hashtable = new Dictionary<BlockId, Buffer>();
 
+    /// <summary>
+    /// Creates a hash-table-backed buffer manager with the specified number of buffer slots.
+    /// </summary>
+    /// <param name="fm">The file manager for disk I/O.</param>
+    /// <param name="lm">The log manager for WAL operations.</param>
+    /// <param name="numbuffs">The number of buffers in the pool.</param>
     public BufferMgrWithBufferHashTable(FileMgr fm, LogMgr lm, int numbuffs)
     {
         _bufferpool = new Buffer[numbuffs];
@@ -866,6 +1040,9 @@ public class BufferMgrWithBufferHashTable
             _bufferpool[i] = new Buffer(fm, lm);
     }
 
+    /// <summary>
+    /// Returns the number of unpinned (available) buffers.
+    /// </summary>
     public int Available()
     {
         lock (this)
@@ -874,11 +1051,15 @@ public class BufferMgrWithBufferHashTable
         }
     }
 
+    /// <summary>
+    /// Flushes all dirty buffers that were modified by the specified transaction.
+    /// </summary>
+    /// <param name="txnum">The transaction number whose buffers should be flushed.</param>
     public void FlushAll(int txnum)
     {
         lock (this)
         {
-            // flush all the buffer in buffer pool 
+            // flush all the buffer in buffer pool
             // with corresponding txn id
             foreach (Buffer buff in _bufferpool)
             {
@@ -888,6 +1069,12 @@ public class BufferMgrWithBufferHashTable
         }
     }
 
+    /// <summary>
+    /// Pins the buffer holding the specified block, using hash-table-accelerated lookup.
+    /// </summary>
+    /// <param name="blk">The block to pin.</param>
+    /// <returns>The pinned buffer.</returns>
+    /// <exception cref="BufferAbortException">Thrown if no buffer becomes available within the timeout.</exception>
     public Buffer Pin(BlockId blk)
     {
         lock (this)
@@ -895,7 +1082,7 @@ public class BufferMgrWithBufferHashTable
             long timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             Buffer buff = TryToPin(blk);
             // wait until it can acquire lock
-            // MAX_TIME is the maximum time it waits 
+            // MAX_TIME is the maximum time it waits
             while (buff == null && !WaitingTooLong(timestamp))
             {
                 Monitor.Wait(this, TimeSpan.FromMilliseconds(MAX_TIME));
@@ -974,6 +1161,10 @@ public class BufferMgrWithBufferHashTable
         return null;
     }
 
+    /// <summary>
+    /// Unpins the given buffer and notifies waiting threads if it becomes fully unpinned.
+    /// </summary>
+    /// <param name="buff">The buffer to unpin.</param>
     public void Unpin(Buffer buff)
     {
         lock (this)
