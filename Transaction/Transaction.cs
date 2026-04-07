@@ -229,4 +229,35 @@ public class Transaction
             return _nextTxNum;
         }
     }
+
+    /// <summary>
+    /// Runs a quiescent checkpoint: blocks new transactions, waits for all running
+    /// transactions to finish, flushes all modified buffers, and writes a CHECKPOINT
+    /// log record.
+    /// </summary>
+    /// <param name="bm">The buffer manager used to flush dirty buffers.</param>
+    /// <param name="lm">The log manager used to write the checkpoint record.</param>
+    public static void RunQuiescentCheckpointing(IBufferMgr bm, LogMgr lm)
+    {
+        // stop accepting new transactions
+        StartCheckpoint();
+        try
+        {
+            // wait for existing transactions to finish
+            while (!_runningTxns.IsEmpty)
+            {
+                Thread.Sleep(1);
+            }
+            // flush all modified buffers
+            bm.FlushAll();
+            // append a quiescent checkpoint record to the log and flush it to disk
+            int lsn = CheckpointRecord.WriteToLog(lm);
+            lm.Flush(lsn);
+        }
+        finally
+        {
+            // start accepting new transactions
+            EndCheckpoint();
+        }
+    }
 }

@@ -19,6 +19,11 @@ public interface IBufferMgr
     void FlushAll(int txnum);
 
     /// <summary>
+    /// Flushes all dirty buffers regardless of which transaction modified them.
+    /// </summary>
+    void FlushAll();
+
+    /// <summary>
     /// Pins the buffer holding the specified block, blocking until a buffer is
     /// available or the wait times out.
     /// </summary>

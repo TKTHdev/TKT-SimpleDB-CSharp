@@ -41,6 +41,18 @@ public abstract class AbstractBufferMgr : IBufferMgr
         }
     }
 
+    public void FlushAll()
+    {
+        lock (this)
+        {
+            foreach (Buffer buff in _bufferpool)
+            {
+                if (buff.ModifyingTxn() >= 0)
+                    buff.Flush();
+            }
+        }
+    }
+
     public Buffer Pin(BlockId blk)
     {
         lock (this)
