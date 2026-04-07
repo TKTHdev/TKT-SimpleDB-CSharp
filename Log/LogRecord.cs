@@ -20,6 +20,8 @@ public interface LogRecord
     const int SETINT = 4;
     /// <summary>Operation type: string value update.</summary>
     const int SETSTRING = 5;
+    /// <summary>Operation type: non-quiescent checkpoint.</summary>
+    const int NQCHECKPOINT = 6;
 
     /// <summary>Returns the operation type of this log record.</summary>
     int Op();
@@ -54,6 +56,8 @@ public interface LogRecord
                 return new SetIntRecord(p);
             case SETSTRING:
                 return new SetStringRecord(p);
+            case NQCHECKPOINT:
+                return new NQCheckpointRecord(p);
             default:
                 return null;
         }
@@ -443,6 +447,91 @@ public class SetIntRecord : LogRecord
         p.SetInt(bpos, blk.Number());
         p.SetInt(opos, offset);
         p.SetInt(vpos, val);
+        return lm.Append(rec);
+    }
+}
+
+/// <summary>
+/// A log record indicating a non-quiescent checkpoint. Stores the list of active
+/// transaction numbers at the time of the checkpoint, so that recovery knows which
+/// transactions may still have been in progress.
+/// Layout: [NQCHECKPOINT][txn count][txnum1][txnum2]...
+/// </summary>
+public class NQCheckpointRecord : LogRecord
+{
+    private List<int> _txnums;
+
+    /// <summary>
+    /// Creates a non-quiescent checkpoint record with the given active transaction list.
+    /// </summary>
+    /// <param name="txnums">The list of active transaction numbers.</param>
+    public NQCheckpointRecord(List<int> txnums)
+    {
+        _txnums = txnums;
+    }
+
+    /// <summary>
+    /// Deserializes a NQCHECKPOINT record from the given page.
+    /// </summary>
+    /// <param name="p">The page containing the serialized record.</param>
+    public NQCheckpointRecord(Page p)
+    {
+        int tpos = sizeof(int);
+        int count = p.GetInt(tpos);
+        _txnums = new List<int>();
+        int pos = tpos + sizeof(int);
+        for (int i = 0; i < count; i++)
+        {
+            _txnums.Add(p.GetInt(pos));
+            pos += sizeof(int);
+        }
+    }
+
+    /// <inheritdoc/>
+    public int Op()
+    {
+        return LogRecord.NQCHECKPOINT;
+    }
+
+    /// <summary>Returns -1 because checkpoints are not associated with a single transaction.</summary>
+    public int TxNumber()
+    {
+        return -1;
+    }
+
+    /// <summary>
+    /// Returns the list of transaction numbers that were active at checkpoint time.
+    /// </summary>
+    public IReadOnlyList<int> ActiveTxns => _txnums.AsReadOnly();
+
+    /// <inheritdoc/>
+    public override string ToString()
+    {
+        return "<NQCHECKPOINT " + string.Join(",", _txnums) + ">";
+    }
+
+    /// <summary>No-op; checkpoints cannot be undone.</summary>
+    public void Undo(Transaction tx) { }
+
+    /// <summary>
+    /// Writes a NQCHECKPOINT record to the log with the list of active transactions.
+    /// </summary>
+    /// <param name="lm">The log manager.</param>
+    /// <param name="txnums">The active transaction numbers at checkpoint time.</param>
+    public static int WriteToLog(LogMgr lm, List<int> txnums)
+    {
+        // Layout: [NQCHECKPOINT(int)][count(int)][txnum1(int)][txnum2(int)]...
+        int reclen = sizeof(int) + sizeof(int) + txnums.Count * sizeof(int);
+        byte[] rec = new byte[reclen];
+        Page p = new Page(rec);
+        p.SetInt(0, LogRecord.NQCHECKPOINT);
+        p.SetInt(sizeof(int), txnums.Count);
+        int pos = 2 * sizeof(int);
+        foreach (int txnum in txnums)
+        {
+            p.SetInt(pos, txnum);
+            pos += sizeof(int);
+        }
         return lm.Append(rec);
     }
 }
