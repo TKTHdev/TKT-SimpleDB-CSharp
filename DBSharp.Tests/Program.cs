@@ -67,6 +67,8 @@ var tests = new (string Name, Action Body)[]
     ("Recovery preserves data after commit and rollback", Recovery_AfterCommitAndRollback),
     ("Recovery is idempotent", Recovery_Idempotent),
     ("Recovery stops scanning at CHECKPOINT record", Recovery_StopsAtCheckpoint),
+    ("Transaction Rollback undoes append", Transaction_RollbackUndoesAppend),
+    ("Recovery preserves append state after commit and rollback", Recovery_AppendAfterCommitAndRollback),
 };
 
 var failures = new List<string>();
@@ -1572,6 +1574,53 @@ static void QuiescentCheckpoint_FlushesAndWritesRecord()
     tx2.Pin(blk);
     Assert.Equal(99, tx2.GetInt(blk, 0));
     tx2.Commit();
+}
+
+static void Transaction_RollbackUndoesAppend()
+{
+    var (fm, lm, bm) = CreateTxTestDeps();
+    string file = TxTestFile();
+
+    // tx1 appends a block and commits
+    var tx1 = new Transaction(fm, lm, bm);
+    tx1.Append(file);
+    Assert.Equal(1, tx1.Size(file));
+    tx1.Commit();
+
+    // tx2 appends another block, then rolls back
+    var tx2 = new Transaction(fm, lm, bm);
+    tx2.Append(file);
+    Assert.Equal(2, tx2.Size(file));
+    tx2.Rollback();
+
+    // tx3 should see only the original block
+    var tx3 = new Transaction(fm, lm, bm);
+    Assert.Equal(1, tx3.Size(file));
+    tx3.Commit();
+}
+
+static void Recovery_AppendAfterCommitAndRollback()
+{
+    var (fm, lm, bm) = CreateTxTestDeps();
+    string file = TxTestFile();
+
+    // tx1: append a block and commit
+    var tx1 = new Transaction(fm, lm, bm);
+    tx1.Append(file);
+    tx1.Commit();
+
+    // tx2: append another block, then rollback (undo via normal rollback)
+    var tx2 = new Transaction(fm, lm, bm);
+    tx2.Append(file);
+    tx2.Rollback();
+
+    // recovery should see tx1 committed and tx2 rolled back
+    var txR = new Transaction(fm, lm, bm);
+    txR.Recover();
+
+    var txRead = new Transaction(fm, lm, bm);
+    Assert.Equal(1, txRead.Size(file));
+    txRead.Commit();
 }
 
 static string CreateDirectory()

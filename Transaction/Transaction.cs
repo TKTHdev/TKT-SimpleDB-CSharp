@@ -201,7 +201,23 @@ public class Transaction
         // to avoid phantoms
         BlockId dummyBlk = new BlockId(filename, END_OF_FILE);
         _concurMgr.XLock(dummyBlk);
+        int lsn = -1;
+        lsn =  _recoveryMgr.Append(filename);
         return _fm.Append(filename);
+    }
+
+    /// <summary>
+    /// Removes the last block from the specified file.
+    /// Used during recovery to undo an append operation.
+    /// No lock is acquired here because this is only called during rollback
+    /// (where the transaction already holds an XLock on the EOF block) or
+    /// crash recovery (where a single transaction processes undos sequentially
+    /// with no concurrent access).
+    /// </summary>
+    /// <param name="filename">The name of the file to truncate.</param>
+    public void Truncate(string filename)
+    {
+        _fm.Truncate(filename);
     }
 
     /// <summary>

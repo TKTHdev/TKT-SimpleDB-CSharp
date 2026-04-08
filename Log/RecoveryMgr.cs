@@ -93,6 +93,16 @@ public class RecoveryMgr
         return SetStringRecord.WriteToLog(_lm, _txnum, blk, offset, oldval);
     }
 
+    /// <summary>
+    /// Logs a block append operation so it can be undone during rollback or recovery.
+    /// </summary>
+    /// <param name="filename">The name of the file that was appended to.</param>
+    /// <returns>The LSN of the log record.</returns>
+    public int Append(string filename)
+    {
+        return AppendRecord.WriteToLog(_lm, _txnum, filename);
+    }
+
     private void DoRollback()
     {
         // iterate in reverse order
@@ -113,22 +123,68 @@ public class RecoveryMgr
     private void DoRecover()
     {
         List<int> finishedTxs = new List<int>();
+        // When we hit a non-quiescent checkpoint, this holds the txns
+        // that were active at checkpoint time and have not yet finished.
+        // We must keep scanning back until we find all their START records.
+        HashSet<int> unresolvedTxns = null;
         // iterate in reverse order
         foreach (byte[] bytes in _lm.GetEnumerator())
         {
             LogRecord rec = LogRecord.CreateLogRecord(bytes);
             // iterate until it reaches CHECKPOINT record
-            // because all the updates before the CHECKPOINT is guaranteed 
+            // because all the updates before the CHECKPOINT is guaranteed
             // to have been written to the data file
             if (rec.Op() == LogRecord.CHECKPOINT)
                 return;
-            // if it is a completed transaction, it doesn't need to be undoed 
-            // since it is not written to the data file
+
+            if (rec.Op() == LogRecord.NQCHECKPOINT)
+            {
+                // Non-quiescent checkpoint: transactions not in the active list
+                // at checkpoint time are guaranteed to be flushed, so we only
+                // need to continue scanning for those that were still active.
+                var nqRec = (NQCheckpointRecord)rec;
+                unresolvedTxns = new HashSet<int>();
+                foreach (int txnum in nqRec.ActiveTxns)
+                {
+                    if (!finishedTxs.Contains(txnum))
+                        unresolvedTxns.Add(txnum);
+                }
+                // If all active txns at checkpoint time have already finished,
+                // we can stop scanning.
+                if (unresolvedTxns.Count == 0)
+                    return;
+                continue;
+            }
+
             if (rec.Op() == LogRecord.COMMIT || rec.Op() == LogRecord.ROLLBACK)
+            {
                 finishedTxs.Add(rec.TxNumber());
-            // undo if it is not completed transaction
-            else if (!finishedTxs.Contains(rec.TxNumber()))
-                rec.Undo(_tx);
+                unresolvedTxns?.Remove(rec.TxNumber());
+            }
+            else if (unresolvedTxns != null)
+            {
+                // After NQCHECKPOINT: only process records for unresolved txns.
+                // Undo their updates and stop when all their START records are found.
+                if (unresolvedTxns.Contains(rec.TxNumber()))
+                {
+                    if (rec.Op() == LogRecord.START)
+                    {
+                        unresolvedTxns.Remove(rec.TxNumber());
+                        if (unresolvedTxns.Count == 0)
+                            return;
+                    }
+                    else
+                    {
+                        rec.Undo(_tx);
+                    }
+                }
+            }
+            else
+            {
+                // Before NQCHECKPOINT: undo any uncommitted transaction's records
+                if (!finishedTxs.Contains(rec.TxNumber()))
+                    rec.Undo(_tx);
+            }
         }
     }
 }

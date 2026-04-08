@@ -20,6 +20,10 @@ public interface LogRecord
     const int SETINT = 4;
     /// <summary>Operation type: string value update.</summary>
     const int SETSTRING = 5;
+    /// <summary>Operation type: non-quiescent checkpoint.</summary>
+    const int NQCHECKPOINT = 6;
+    /// <summary>Operation type: block append.</summary>
+    const int APPEND = 7;
 
     /// <summary>Returns the operation type of this log record.</summary>
     int Op();
@@ -54,6 +58,10 @@ public interface LogRecord
                 return new SetIntRecord(p);
             case SETSTRING:
                 return new SetStringRecord(p);
+            case NQCHECKPOINT:
+                return new NQCheckpointRecord(p);
+            case APPEND:
+                return new AppendRecord(p);
             default:
                 return null;
         }
@@ -446,3 +454,154 @@ public class SetIntRecord : LogRecord
         return lm.Append(rec);
     }
 }
+
+/// <summary>
+/// A log record indicating a non-quiescent checkpoint. Stores the list of active
+/// transaction numbers at the time of the checkpoint, so that recovery knows which
+/// transactions may still have been in progress.
+/// Layout: [NQCHECKPOINT][txn count][txnum1][txnum2]...
+/// </summary>
+public class NQCheckpointRecord : LogRecord
+{
+    private List<int> _txnums;
+
+    /// <summary>
+    /// Creates a non-quiescent checkpoint record with the given active transaction list.
+    /// </summary>
+    /// <param name="txnums">The list of active transaction numbers.</param>
+    public NQCheckpointRecord(List<int> txnums)
+    {
+        _txnums = txnums;
+    }
+
+    /// <summary>
+    /// Deserializes a NQCHECKPOINT record from the given page.
+    /// </summary>
+    /// <param name="p">The page containing the serialized record.</param>
+    public NQCheckpointRecord(Page p)
+    {
+        int tpos = sizeof(int);
+        int count = p.GetInt(tpos);
+        _txnums = new List<int>();
+        int pos = tpos + sizeof(int);
+        for (int i = 0; i < count; i++)
+        {
+            _txnums.Add(p.GetInt(pos));
+            pos += sizeof(int);
+        }
+    }
+
+    /// <inheritdoc/>
+    public int Op()
+    {
+        return LogRecord.NQCHECKPOINT;
+    }
+
+    /// <summary>Returns -1 because checkpoints are not associated with a single transaction.</summary>
+    public int TxNumber()
+    {
+        return -1;
+    }
+
+    /// <summary>
+    /// Returns the list of transaction numbers that were active at checkpoint time.
+    /// </summary>
+    public IReadOnlyList<int> ActiveTxns => _txnums.AsReadOnly();
+
+    /// <inheritdoc/>
+    public override string ToString()
+    {
+        return "<NQCHECKPOINT " + string.Join(",", _txnums) + ">";
+    }
+
+    /// <summary>No-op; checkpoints cannot be undone.</summary>
+    public void Undo(Transaction tx) { }
+
+    /// <summary>
+    /// Writes a NQCHECKPOINT record to the log with the list of active transactions.
+    /// </summary>
+    /// <param name="lm">The log manager.</param>
+    /// <param name="txnums">The active transaction numbers at checkpoint time.</param>
+    public static int WriteToLog(LogMgr lm, List<int> txnums)
+    {
+        // Layout: [NQCHECKPOINT(int)][count(int)][txnum1(int)][txnum2(int)]...
+        int reclen = sizeof(int) + sizeof(int) + txnums.Count * sizeof(int);
+        byte[] rec = new byte[reclen];
+        Page p = new Page(rec);
+        p.SetInt(0, LogRecord.NQCHECKPOINT);
+        p.SetInt(sizeof(int), txnums.Count);
+        int pos = 2 * sizeof(int);
+        foreach (int txnum in txnums)
+        {
+            p.SetInt(pos, txnum);
+            pos += sizeof(int);
+        }
+        return lm.Append(rec);
+    }
+}
+
+/// <summary>
+/// A log record that captures a block append operation so it can be undone during recovery.
+/// Undo truncates the last block from the file.
+/// Layout: [APPEND][txnum][filename]
+/// </summary>
+public class AppendRecord : LogRecord
+{
+    private int _txnum;
+    private string _filename;
+
+    /// <summary>
+    /// Deserializes an APPEND record from the given page.
+    /// </summary>
+    /// <param name="p">The page containing the serialized record.</param>
+    public AppendRecord(Page p)
+    {
+        int tpos = sizeof(int);
+        _txnum = p.GetInt(tpos);
+
+        int fpos = tpos + sizeof(int);
+        _filename = p.GetString(fpos);
+    }
+
+    /// <inheritdoc/>
+    public int Op() => LogRecord.APPEND;
+
+    /// <inheritdoc/>
+    public int TxNumber() => _txnum;
+
+    /// <inheritdoc/>
+    public override string ToString()
+    {
+        return "<APPEND " + _txnum + " " + _filename + ">";
+    }
+
+    /// <summary>
+    /// Undoes the append by truncating the last block from the file.
+    /// </summary>
+    /// <param name="tx">The transaction used to perform the undo.</param>
+    public void Undo(Transaction tx)
+    {
+        tx.Truncate(_filename);
+    }
+
+    /// <summary>
+    /// Writes an APPEND record to the log.
+    /// </summary>
+    /// <param name="lm">The log manager.</param>
+    /// <param name="txnum">The transaction number.</param>
+    /// <param name="filename">The name of the file that was appended to.</param>
+    /// <returns>The LSN of the new log record.</returns>
+    public static int WriteToLog(LogMgr lm, int txnum, string filename)
+    {
+        int tpos = sizeof(int);
+        int fpos = tpos + sizeof(int);
+        int reclen = fpos + Page.MaxLength(filename.Length);
+        byte[] rec = new byte[reclen];
+        Page p = new Page(rec);
+        p.SetInt(0, LogRecord.APPEND);
+        p.SetInt(tpos, txnum);
+        p.SetString(fpos, filename);
+        return lm.Append(rec);
+    }
+}
+
