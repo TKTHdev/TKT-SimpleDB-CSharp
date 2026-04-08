@@ -145,9 +145,33 @@ public class FileMgr
             }
             catch (IOException e)
             {
-                throw new Exception("cannot appene block " + blk, e);
+                throw new Exception("cannot append block " + blk, e);
             }
             return blk;
+        }
+    }
+
+    /// <summary>
+    /// Removes the last block from the specified file.
+    /// Used during recovery to undo an append operation.
+    /// </summary>
+    /// <param name="filename">The name of the file to truncate.</param>
+    public void Truncate(string filename)
+    {
+        lock (this)
+        {
+            try
+            {
+                FileStream fs = GetFile(filename);
+                long newLength = fs.Length - _blockSize;
+                if (newLength < 0)
+                    throw new IOException("file is already empty");
+                fs.SetLength(newLength);
+            }
+            catch (IOException e)
+            {
+                throw new Exception("cannot truncate " + filename, e);
+            }
         }
     }
 
