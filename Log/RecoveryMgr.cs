@@ -93,6 +93,16 @@ public class RecoveryMgr
         return SetStringRecord.WriteToLog(_lm, _txnum, blk, offset, oldval);
     }
 
+    /// <summary>
+    /// Logs a block append operation so it can be undone during rollback or recovery.
+    /// </summary>
+    /// <param name="filename">The name of the file that was appended to.</param>
+    /// <returns>The LSN of the log record.</returns>
+    public int Append(string filename)
+    {
+        return AppendRecord.WriteToLog(_lm, _txnum, filename);
+    }
+
     private void DoRollback()
     {
         // iterate in reverse order
