@@ -207,6 +207,20 @@ public class Transaction
     }
 
     /// <summary>
+    /// Removes the last block from the specified file.
+    /// Used during recovery to undo an append operation.
+    /// No lock is acquired here because this is only called during rollback
+    /// (where the transaction already holds an XLock on the EOF block) or
+    /// crash recovery (where a single transaction processes undos sequentially
+    /// with no concurrent access).
+    /// </summary>
+    /// <param name="filename">The name of the file to truncate.</param>
+    public void Truncate(string filename)
+    {
+        _fm.Truncate(filename);
+    }
+
+    /// <summary>
     /// Returns the block size used by the underlying file manager.
     /// </summary>
     public int BlockSize()
