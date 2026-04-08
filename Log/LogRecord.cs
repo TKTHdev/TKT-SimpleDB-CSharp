@@ -22,6 +22,8 @@ public interface LogRecord
     const int SETSTRING = 5;
     /// <summary>Operation type: non-quiescent checkpoint.</summary>
     const int NQCHECKPOINT = 6;
+    /// <summary>Operation type: block append.</summary>
+    const int APPEND = 7;
 
     /// <summary>Returns the operation type of this log record.</summary>
     int Op();
@@ -58,6 +60,8 @@ public interface LogRecord
                 return new SetStringRecord(p);
             case NQCHECKPOINT:
                 return new NQCheckpointRecord(p);
+            case APPEND:
+                return new AppendRecord(p);
             default:
                 return null;
         }
@@ -535,3 +539,69 @@ public class NQCheckpointRecord : LogRecord
         return lm.Append(rec);
     }
 }
+
+/// <summary>
+/// A log record that captures a block append operation so it can be undone during recovery.
+/// Undo truncates the last block from the file.
+/// Layout: [APPEND][txnum][filename]
+/// </summary>
+public class AppendRecord : LogRecord
+{
+    private int _txnum;
+    private string _filename;
+
+    /// <summary>
+    /// Deserializes an APPEND record from the given page.
+    /// </summary>
+    /// <param name="p">The page containing the serialized record.</param>
+    public AppendRecord(Page p)
+    {
+        int tpos = sizeof(int);
+        _txnum = p.GetInt(tpos);
+
+        int fpos = tpos + sizeof(int);
+        _filename = p.GetString(fpos);
+    }
+
+    /// <inheritdoc/>
+    public int Op() => LogRecord.APPEND;
+
+    /// <inheritdoc/>
+    public int TxNumber() => _txnum;
+
+    /// <inheritdoc/>
+    public override string ToString()
+    {
+        return "<APPEND " + _txnum + " " + _filename + ">";
+    }
+
+    /// <summary>
+    /// Undoes the append by truncating the last block from the file.
+    /// </summary>
+    /// <param name="tx">The transaction used to perform the undo.</param>
+    public void Undo(Transaction tx)
+    {
+        tx.Truncate(_filename);
+    }
+
+    /// <summary>
+    /// Writes an APPEND record to the log.
+    /// </summary>
+    /// <param name="lm">The log manager.</param>
+    /// <param name="txnum">The transaction number.</param>
+    /// <param name="filename">The name of the file that was appended to.</param>
+    /// <returns>The LSN of the new log record.</returns>
+    public static int WriteToLog(LogMgr lm, int txnum, string filename)
+    {
+        int tpos = sizeof(int);
+        int fpos = tpos + sizeof(int);
+        int reclen = fpos + Page.MaxLength(filename.Length);
+        byte[] rec = new byte[reclen];
+        Page p = new Page(rec);
+        p.SetInt(0, LogRecord.APPEND);
+        p.SetInt(tpos, txnum);
+        p.SetString(fpos, filename);
+        return lm.Append(rec);
+    }
+}
+
