@@ -70,7 +70,17 @@ public class LogMgr
     public IEnumerable<byte[]> GetEnumerator()
     {
         Flush();
-        return new LogIterator(_fm, _currentblk);
+        return new BackwardLogIterator(_fm, _currentblk);
+    }
+
+    /// <summary>
+    /// Flushes the current log page and returns a forward iterator over all log records
+    /// in chronological order (oldest first).
+    /// </summary>
+    public IEnumerable<byte[]> GetForwardEnumerator()
+    {
+        Flush();
+        return new ForwardLogIterator(_fm, _currentblk);
     }
 
     /// <summary>
