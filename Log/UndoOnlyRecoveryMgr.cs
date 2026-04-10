@@ -107,7 +107,7 @@ public class UndoOnlyRecoveryMgr : IRecoveryMgr
     private void DoRollback()
     {
         // iterate in reverse order
-        foreach (byte[] bytes in _lm.GetEnumerator())
+        foreach (byte[] bytes in _lm.GetBackwardEnumerator())
         {
             LogRecord rec = LogRecord.CreateLogRecord(bytes);
             // if the record is by the corresponding transaction
@@ -129,7 +129,7 @@ public class UndoOnlyRecoveryMgr : IRecoveryMgr
         // We must keep scanning back until we find all their START records.
         HashSet<int> unresolvedTxns = null;
         // iterate in reverse order
-        foreach (byte[] bytes in _lm.GetEnumerator())
+        foreach (byte[] bytes in _lm.GetBackwardEnumerator())
         {
             LogRecord rec = LogRecord.CreateLogRecord(bytes);
             // iterate until it reaches CHECKPOINT record

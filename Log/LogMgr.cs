@@ -67,7 +67,7 @@ public class LogMgr
     /// Flushes the current log page and returns an iterator over all log records
     /// in reverse order (most recent first).
     /// </summary>
-    public IEnumerable<byte[]> GetEnumerator()
+    public IEnumerable<byte[]> GetBackwardEnumerator()
     {
         Flush();
         return new BackwardLogIterator(_fm, _currentblk);
