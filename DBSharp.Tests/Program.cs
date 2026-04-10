@@ -992,9 +992,9 @@ static void Transaction_XLockBlocksWriter()
     bool tx2Threw = false;
     var thread = new Thread(() =>
     {
+        var tx2 = new Transaction(fm, lm, bm);
         try
         {
-            var tx2 = new Transaction(fm, lm, bm);
             tx2.Pin(blk);
             tx2.SetInt(blk, 0, 3, true);
             tx2.Commit();
@@ -1002,6 +1002,7 @@ static void Transaction_XLockBlocksWriter()
         }
         catch (LockAbortException)
         {
+            tx2.Rollback();
             tx2Threw = true;
         }
     });
@@ -1037,23 +1038,25 @@ static void Transaction_XLockBlocksReader()
     setup.SetInt(blk, 0, 10, true);
     setup.Commit();
 
-    // tx1 takes XLock by writing
-    var tx1 = new Transaction(fm, lm, bm);
-    tx1.Pin(blk);
-    tx1.SetInt(blk, 0, 20, true);
+    // reader (older tx) is created first so it will wait under wait-die
+    var reader = new Transaction(fm, lm, bm);
+    reader.Pin(blk);
 
-    // tx2 tries to read the same block on another thread — should be blocked by XLock
+    // writer (younger tx) takes XLock
+    var writer = new Transaction(fm, lm, bm);
+    writer.Pin(blk);
+    writer.SetInt(blk, 0, 20, true);
+
+    // older reader tries to read — should wait (not die) under wait-die
     var readerStarted = new ManualResetEventSlim(false);
     int readValue = -1;
     bool readerDone = false;
     var thread = new Thread(() =>
     {
-        var tx2 = new Transaction(fm, lm, bm);
-        tx2.Pin(blk);
         readerStarted.Set();
-        // GetInt acquires SLock — blocked while tx1 holds XLock
-        readValue = tx2.GetInt(blk, 0);
-        tx2.Commit();
+        // GetInt acquires SLock — blocked while younger writer holds XLock
+        readValue = reader.GetInt(blk, 0);
+        reader.Commit();
         readerDone = true;
     });
     thread.Start();
@@ -1064,7 +1067,7 @@ static void Transaction_XLockBlocksReader()
     Assert.False(readerDone, "Reader should be blocked while writer holds XLock.");
 
     // release XLock
-    tx1.Commit();
+    writer.Commit();
     thread.Join(TimeSpan.FromSeconds(12));
 
     Assert.True(readerDone, "Reader should complete after writer commits.");
@@ -1082,7 +1085,11 @@ static void Transaction_SLockBlocksWriter()
     setup.SetInt(blk, 0, 10, true);
     setup.Commit();
 
-    // two readers hold SLock
+    // writer (older tx) is created first so it will wait under wait-die
+    var writer = new Transaction(fm, lm, bm);
+    writer.Pin(blk);
+
+    // two younger readers hold SLock
     var reader1 = new Transaction(fm, lm, bm);
     reader1.Pin(blk);
     Assert.Equal(10, reader1.GetInt(blk, 0));
@@ -1091,15 +1098,13 @@ static void Transaction_SLockBlocksWriter()
     reader2.Pin(blk);
     Assert.Equal(10, reader2.GetInt(blk, 0));
 
-    // writer on another thread tries to get XLock — blocked by SLocks
+    // older writer on another thread tries to get XLock — waits for younger SLocks
     var writerStarted = new ManualResetEventSlim(false);
     bool writerDone = false;
     var thread = new Thread(() =>
     {
-        var writer = new Transaction(fm, lm, bm);
-        writer.Pin(blk);
         writerStarted.Set();
-        // SetInt acquires XLock — blocked while readers hold SLock
+        // SetInt acquires XLock — blocked while younger readers hold SLock
         writer.SetInt(blk, 0, 99, true);
         writer.Commit();
         writerDone = true;
@@ -1133,21 +1138,23 @@ static void Transaction_CommitUnblocksWaiter()
     setup.SetInt(blk, 0, 1, true);
     setup.Commit();
 
-    // tx1 holds XLock
-    var tx1 = new Transaction(fm, lm, bm);
-    tx1.Pin(blk);
-    tx1.SetInt(blk, 0, 2, true);
+    // waiter (older tx) is created first so it will wait under wait-die
+    var waiter = new Transaction(fm, lm, bm);
+    waiter.Pin(blk);
+
+    // holder (younger tx) takes XLock
+    var holder = new Transaction(fm, lm, bm);
+    holder.Pin(blk);
+    holder.SetInt(blk, 0, 2, true);
 
     var waiterStarted = new ManualResetEventSlim(false);
     bool waiterDone = false;
     int waiterRead = -1;
     var thread = new Thread(() =>
     {
-        var tx2 = new Transaction(fm, lm, bm);
-        tx2.Pin(blk);
         waiterStarted.Set();
-        waiterRead = tx2.GetInt(blk, 0);
-        tx2.Commit();
+        waiterRead = waiter.GetInt(blk, 0);
+        waiter.Commit();
         waiterDone = true;
     });
     thread.Start();
@@ -1157,7 +1164,7 @@ static void Transaction_CommitUnblocksWaiter()
     Assert.False(waiterDone, "Waiter should be blocked.");
 
     // commit unblocks the waiter
-    tx1.Commit();
+    holder.Commit();
     thread.Join(TimeSpan.FromSeconds(12));
 
     Assert.True(waiterDone, "Waiter should proceed after commit.");
@@ -1175,21 +1182,23 @@ static void Transaction_RollbackUnblocksWaiter()
     setup.SetInt(blk, 0, 1, true);
     setup.Commit();
 
-    // tx1 holds XLock
-    var tx1 = new Transaction(fm, lm, bm);
-    tx1.Pin(blk);
-    tx1.SetInt(blk, 0, 2, true);
+    // waiter (older tx) is created first so it will wait under wait-die
+    var waiter = new Transaction(fm, lm, bm);
+    waiter.Pin(blk);
+
+    // holder (younger tx) takes XLock
+    var holder = new Transaction(fm, lm, bm);
+    holder.Pin(blk);
+    holder.SetInt(blk, 0, 2, true);
 
     var waiterStarted = new ManualResetEventSlim(false);
     bool waiterDone = false;
     int waiterRead = -1;
     var thread = new Thread(() =>
     {
-        var tx2 = new Transaction(fm, lm, bm);
-        tx2.Pin(blk);
         waiterStarted.Set();
-        waiterRead = tx2.GetInt(blk, 0);
-        tx2.Commit();
+        waiterRead = waiter.GetInt(blk, 0);
+        waiter.Commit();
         waiterDone = true;
     });
     thread.Start();
@@ -1199,7 +1208,7 @@ static void Transaction_RollbackUnblocksWaiter()
     Assert.False(waiterDone, "Waiter should be blocked.");
 
     // rollback releases locks and undoes changes
-    tx1.Rollback();
+    holder.Rollback();
     thread.Join(TimeSpan.FromSeconds(12));
 
     Assert.True(waiterDone, "Waiter should proceed after rollback.");
@@ -1230,9 +1239,9 @@ static void Transaction_WritersSerialized()
         threads[i] = new Thread(() =>
         {
             barrier.Wait();
+            var tx = new Transaction(fm, lm, bm);
             try
             {
-                var tx = new Transaction(fm, lm, bm);
                 tx.Pin(blk);
                 int current = tx.GetInt(blk, 0);
                 tx.SetInt(blk, 0, current + 1, true);
@@ -1241,7 +1250,8 @@ static void Transaction_WritersSerialized()
             }
             catch (LockAbortException)
             {
-                // timed out waiting for lock — acceptable under contention
+                tx.Rollback();
+                // died under wait-die — acceptable under contention
             }
         });
         threads[i].Start();
@@ -1633,6 +1643,241 @@ static string CreateDirectory()
 static string UniqueDirectoryPath()
 {
     return Path.Combine(Path.GetTempPath(), $"dbsharp-tests-{Guid.NewGuid():N}");
+}
+
+// ── Wait-Die tests ──────────────────────────────────────────────────────────
+
+// Younger tx (higher txnum) tries to write a block XLocked by an older tx → dies immediately.
+static void WaitDie_YoungerWriterDies()
+{
+    var (fm, lm, bm) = CreateTxTestDeps();
+    string file = TxTestFile();
+
+    var setup = new Transaction(fm, lm, bm);
+    BlockId blk = setup.Append(file);
+    setup.Pin(blk);
+    setup.SetInt(blk, 0, 1, true);
+    setup.Commit();
+
+    // older tx takes XLock
+    var older = new Transaction(fm, lm, bm); // lower txnum
+    older.Pin(blk);
+    older.SetInt(blk, 0, 2, true);
+
+    // younger tx tries to write the same block → should die immediately
+    bool youngerDied = false;
+    var thread = new Thread(() =>
+    {
+        var younger = new Transaction(fm, lm, bm); // higher txnum
+        try
+        {
+            younger.Pin(blk);
+            younger.SetInt(blk, 0, 3, true);
+            younger.Commit();
+        }
+        catch (LockAbortException)
+        {
+            younger.Rollback();
+            youngerDied = true;
+        }
+    });
+    thread.Start();
+    // younger should die almost instantly — no need for long wait
+    thread.Join(TimeSpan.FromSeconds(3));
+
+    Assert.True(youngerDied, "Younger tx should die immediately when older holds XLock.");
+
+    older.Commit();
+}
+
+// Older tx (lower txnum) tries to read a block XLocked by a younger tx → waits, then proceeds after younger commits.
+static void WaitDie_OlderReaderWaitsForYoungerXLock()
+{
+    var (fm, lm, bm) = CreateTxTestDeps();
+    string file = TxTestFile();
+
+    // setup: create block with initial value
+    var setup = new Transaction(fm, lm, bm);
+    BlockId blk = setup.Append(file);
+    setup.Pin(blk);
+    setup.SetInt(blk, 0, 10, true);
+    setup.Commit();
+
+    // older tx is created first (lower txnum)
+    var older = new Transaction(fm, lm, bm);
+    older.Pin(blk);
+
+    // younger tx takes XLock
+    var younger = new Transaction(fm, lm, bm);
+    younger.Pin(blk);
+    younger.SetInt(blk, 0, 20, true);
+
+    // older tx tries to read — should wait (not die)
+    var olderStarted = new ManualResetEventSlim(false);
+    bool olderDone = false;
+    int olderRead = -1;
+    var thread = new Thread(() =>
+    {
+        olderStarted.Set();
+        olderRead = older.GetInt(blk, 0);
+        older.Commit();
+        olderDone = true;
+    });
+    thread.Start();
+
+    olderStarted.Wait();
+    Thread.Sleep(300);
+    Assert.False(olderDone, "Older tx should be waiting, not completed.");
+
+    // younger commits → older should proceed
+    younger.Commit();
+    thread.Join(TimeSpan.FromSeconds(5));
+
+    Assert.True(olderDone, "Older tx should proceed after younger commits.");
+    Assert.Equal(20, olderRead);
+}
+
+// Younger tx tries to read a block XLocked by an older tx → dies immediately.
+static void WaitDie_YoungerReaderDiesWhenOlderHoldsXLock()
+{
+    var (fm, lm, bm) = CreateTxTestDeps();
+    string file = TxTestFile();
+
+    var setup = new Transaction(fm, lm, bm);
+    BlockId blk = setup.Append(file);
+    setup.Pin(blk);
+    setup.SetInt(blk, 0, 1, true);
+    setup.Commit();
+
+    // older tx takes XLock
+    var older = new Transaction(fm, lm, bm);
+    older.Pin(blk);
+    older.SetInt(blk, 0, 2, true);
+
+    // younger tx tries to read → should die
+    bool youngerDied = false;
+    var thread = new Thread(() =>
+    {
+        var younger = new Transaction(fm, lm, bm);
+        try
+        {
+            younger.Pin(blk);
+            younger.GetInt(blk, 0);
+            younger.Commit();
+        }
+        catch (LockAbortException)
+        {
+            younger.Rollback();
+            youngerDied = true;
+        }
+    });
+    thread.Start();
+    thread.Join(TimeSpan.FromSeconds(3));
+
+    Assert.True(youngerDied, "Younger tx should die when trying to read a block XLocked by older tx.");
+
+    older.Commit();
+}
+
+// Older tx (lower txnum) tries to write a block SLocked by younger txs → waits, then proceeds after they commit.
+static void WaitDie_OlderWriterWaitsForYoungerSLocks()
+{
+    var (fm, lm, bm) = CreateTxTestDeps();
+    string file = TxTestFile();
+
+    var setup = new Transaction(fm, lm, bm);
+    BlockId blk = setup.Append(file);
+    setup.Pin(blk);
+    setup.SetInt(blk, 0, 10, true);
+    setup.Commit();
+
+    // older tx is created first
+    var older = new Transaction(fm, lm, bm);
+    older.Pin(blk);
+
+    // two younger txs take SLocks
+    var younger1 = new Transaction(fm, lm, bm);
+    younger1.Pin(blk);
+    Assert.Equal(10, younger1.GetInt(blk, 0));
+
+    var younger2 = new Transaction(fm, lm, bm);
+    younger2.Pin(blk);
+    Assert.Equal(10, younger2.GetInt(blk, 0));
+
+    // older tx tries to write → should wait (it's older than all SLock holders)
+    var olderStarted = new ManualResetEventSlim(false);
+    bool olderDone = false;
+    var thread = new Thread(() =>
+    {
+        olderStarted.Set();
+        older.SetInt(blk, 0, 99, true);
+        older.Commit();
+        olderDone = true;
+    });
+    thread.Start();
+
+    olderStarted.Wait();
+    Thread.Sleep(300);
+    Assert.False(olderDone, "Older tx should wait while younger txs hold SLocks.");
+
+    // release one younger → still blocked
+    younger1.Commit();
+    Thread.Sleep(300);
+    Assert.False(olderDone, "Older tx should still wait with one younger SLock remaining.");
+
+    // release second younger → older proceeds
+    younger2.Commit();
+    thread.Join(TimeSpan.FromSeconds(5));
+
+    Assert.True(olderDone, "Older tx should proceed after all younger SLocks released.");
+
+    // verify written value
+    var reader = new Transaction(fm, lm, bm);
+    reader.Pin(blk);
+    Assert.Equal(99, reader.GetInt(blk, 0));
+    reader.Commit();
+}
+
+// Younger tx tries to write a block SLocked by an older tx → dies immediately.
+static void WaitDie_YoungerWriterDiesWhenOlderHoldsSLock()
+{
+    var (fm, lm, bm) = CreateTxTestDeps();
+    string file = TxTestFile();
+
+    var setup = new Transaction(fm, lm, bm);
+    BlockId blk = setup.Append(file);
+    setup.Pin(blk);
+    setup.SetInt(blk, 0, 1, true);
+    setup.Commit();
+
+    // older tx takes SLock by reading
+    var older = new Transaction(fm, lm, bm);
+    older.Pin(blk);
+    Assert.Equal(1, older.GetInt(blk, 0));
+
+    // younger tx tries to write → should die (younger than SLock holder)
+    bool youngerDied = false;
+    var thread = new Thread(() =>
+    {
+        var younger = new Transaction(fm, lm, bm);
+        try
+        {
+            younger.Pin(blk);
+            younger.SetInt(blk, 0, 2, true);
+            younger.Commit();
+        }
+        catch (LockAbortException)
+        {
+            younger.Rollback();
+            youngerDied = true;
+        }
+    });
+    thread.Start();
+    thread.Join(TimeSpan.FromSeconds(3));
+
+    Assert.True(youngerDied, "Younger tx should die when trying to write a block SLocked by older tx.");
+
+    older.Commit();
 }
 
 static class Assert
