@@ -20,7 +20,10 @@ public class UndoRedoRecoveryMgr : IRecoveryMgr
     }
     public void Commit()
     {
-        throw new NotImplementedException();
+        // unlike undo-only recovery,
+        // no need to flush all the modified buffers before commit
+        int lsn = CommitRecord.WriteToLog(_lm, _txnum);
+        _lm.Flush(lsn);
     }
 
     public void Rollback()
