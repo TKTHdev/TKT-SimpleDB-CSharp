@@ -6,10 +6,11 @@ using Buffer = DBSharp.Buffers.Buffer;
 namespace DBSharp.Log;
 
 /// <summary>
-/// Handles transaction recovery using the write-ahead log. Provides commit, rollback,
-/// and crash-recovery operations by reading log records and undoing uncommitted changes.
+/// Undo-only recovery manager. Uses a force policy: all dirty buffers are flushed
+/// to disk at commit time. Recovery only requires an undo pass since committed
+/// data is always on disk.
 /// </summary>
-public class RecoveryMgr
+public class UndoOnlyRecoveryMgr : IRecoveryMgr
 {
     private LogMgr _lm;
     private IBufferMgr _bm;
@@ -23,7 +24,7 @@ public class RecoveryMgr
     /// <param name="txnum">The transaction number.</param>
     /// <param name="lm">The log manager.</param>
     /// <param name="bm">The buffer manager.</param>
-    public RecoveryMgr(Transaction tx, int txnum, LogMgr lm, IBufferMgr bm)
+    public UndoOnlyRecoveryMgr(Transaction tx, int txnum, LogMgr lm, IBufferMgr bm)
     {
         _tx = tx;
         _txnum = txnum;
