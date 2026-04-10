@@ -29,7 +29,10 @@ public class UndoRedoRecoveryMgr : IRecoveryMgr
 
     public void Rollback()
     {
-        throw new NotImplementedException();
+        DoRollback();
+        _bm.FlushAll(_txnum);
+        int lsn = RollbackRecord.WriteToLog(_lm, _txnum);
+        _lm.Flush(lsn);
     }
 
     public void Recover()
