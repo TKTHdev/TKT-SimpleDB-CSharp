@@ -15,7 +15,7 @@ public class Transaction
 {
     private static int _nextTxNum = 0;
     private static int END_OF_FILE = -1;
-    private RecoveryMgr _recoveryMgr;
+    private IRecoveryMgr _recoveryMgr;
     private ConcurrencyMgr _concurMgr;
     private IBufferMgr _bm;
     private FileMgr _fm;
@@ -55,7 +55,7 @@ public class Transaction
         _bm = bm;
         _txnum = NextTxNumber();
         _runningTxns.TryAdd(_txnum, true);
-        _recoveryMgr = new RecoveryMgr(this, _txnum, lm, bm);
+        _recoveryMgr = new UndoOnlyRecoveryMgr(this, _txnum, lm, bm);
         _concurMgr = new ConcurrencyMgr();
         _myBuffers = new BufferList(bm);
     }

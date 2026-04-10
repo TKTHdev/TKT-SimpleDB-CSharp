@@ -9,7 +9,7 @@ namespace DBSharp.Log;
 /// most recent block and moving backward through earlier blocks. Each record is
 /// returned as a raw byte array.
 /// </summary>
-class LogIterator : IEnumerable<byte[]>, IEnumerator<byte[]>
+class BackwardLogIterator : IEnumerable<byte[]>, IEnumerator<byte[]>
 {
     private FileMgr _fm;
     private BlockId _blk;
@@ -22,7 +22,7 @@ class LogIterator : IEnumerable<byte[]>, IEnumerator<byte[]>
     /// </summary>
     /// <param name="fm">The file manager for reading blocks.</param>
     /// <param name="blk">The block to start iterating from (typically the current log block).</param>
-    public LogIterator(FileMgr fm, BlockId blk)
+    public BackwardLogIterator(FileMgr fm, BlockId blk)
     {
         _fm = fm;
         _blk = blk;

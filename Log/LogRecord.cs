@@ -38,6 +38,12 @@ public interface LogRecord
     void Undo(Transaction tx);
 
     /// <summary>
+    /// Redoes the operation described by this log record against the given transaction.
+    /// </summary>
+    /// <param name="tx">The transaction to apply the redo to.</param>
+    void Redo(Transaction tx);
+
+    /// <summary>
     /// Factory method that deserializes a raw byte array into the appropriate <see cref="LogRecord"/> subtype.
     /// </summary>
     /// <param name="bytes">The raw bytes of the log record.</param>
@@ -97,6 +103,9 @@ public class CheckpointRecord : LogRecord
     /// <summary>No-op; checkpoints cannot be undone.</summary>
     public void Undo(Transaction tx) { }
 
+    /// <summary>No-op; checkpoints cannot be redone.</summary>
+    public void Redo(Transaction tx) { }
+
     /// <summary>
     /// Writes a CHECKPOINT record to the log and returns its LSN.
     /// </summary>
@@ -147,6 +156,9 @@ public class StartRecord : LogRecord
 
     /// <summary>No-op; START records cannot be undone.</summary>
     public void Undo(Transaction tx) { }
+
+    /// <summary>No-op; START records cannot be redone.</summary>
+    public void Redo(Transaction tx) { }
 
     /// <summary>
     /// Writes a START record for the given transaction to the log.
@@ -201,6 +213,9 @@ public class CommitRecord : LogRecord
     /// <summary>No-op; COMMIT records cannot be undone.</summary>
     public void Undo(Transaction tx) { }
 
+    /// <summary>No-op; COMMIT records cannot be redone.</summary>
+    public void Redo(Transaction tx) { }
+
     /// <summary>
     /// Writes a COMMIT record for the given transaction to the log.
     /// </summary>
@@ -254,6 +269,9 @@ public class RollbackRecord : LogRecord
     /// <summary>No-op; ROLLBACK records cannot be undone.</summary>
     public void Undo(Transaction tx) { }
 
+    /// <summary>No-op; ROLLBACK records cannot be redone.</summary>
+    public void Redo(Transaction tx) { }
+
     /// <summary>
     /// Writes a ROLLBACK record for the given transaction to the log.
     /// </summary>
@@ -270,13 +288,14 @@ public class RollbackRecord : LogRecord
 }
 
 /// <summary>
-/// A log record that captures a string update. Stores the old value so the change can be undone.
-/// Layout: [SETSTRING][txnum][filename][blocknum][offset][old value]
+/// A log record that captures a string update. Stores both old and new values for undo/redo.
+/// Layout: [SETSTRING][txnum][filename][blocknum][offset][old value][new value]
 /// </summary>
 public class SetStringRecord : LogRecord
 {
     private int _txnum, _offset;
-    private string _val;
+    private string _oldval;
+    private string _newval;
     private BlockId _blk;
 
     /// <summary>
@@ -301,7 +320,10 @@ public class SetStringRecord : LogRecord
         _offset = p.GetInt(opos);
 
         int vpos = opos + sizeof(int);
-        _val = p.GetString(vpos);
+        _oldval = p.GetString(vpos);
+
+        int nvpos = vpos + Page.MaxLength(_oldval.Length);
+        _newval = p.GetString(nvpos);
     }
 
     /// <inheritdoc/>
@@ -319,7 +341,7 @@ public class SetStringRecord : LogRecord
     /// <inheritdoc/>
     public override string ToString()
     {
-        return "<SETSTRING " + _txnum + " " + _blk + " " + _offset + " " + _val + ">";
+        return "<SETSTRING " + _txnum + " " + _blk + " " + _offset + " " + _oldval + " " + _newval + ">";
     }
 
     /// <summary>
@@ -330,27 +352,41 @@ public class SetStringRecord : LogRecord
     public void Undo(Transaction tx)
     {
         tx.Pin(_blk);
-        tx.SetString(_blk, _offset, _val, false); // don't log the undo!
+        tx.SetString(_blk, _offset, _oldval, false); // don't log the undo!
         tx.Unpin(_blk);
     }
 
     /// <summary>
-    /// Writes a SETSTRING record to the log, capturing the old value for undo.
+    /// Re-applies the new string value by pinning the block, writing the new value,
+    /// and unpinning. The redo itself is not logged.
+    /// </summary>
+    /// <param name="tx">The transaction used to perform the redo.</param>
+    public void Redo(Transaction tx)
+    {
+        tx.Pin(_blk);
+        tx.SetString(_blk, _offset, _newval, false); // don't log the redo!
+        tx.Unpin(_blk);
+    }
+
+    /// <summary>
+    /// Writes a SETSTRING record to the log, capturing both old and new values.
     /// </summary>
     /// <param name="lm">The log manager.</param>
     /// <param name="txnum">The transaction number.</param>
     /// <param name="blk">The block being modified.</param>
     /// <param name="offset">The byte offset within the block.</param>
-    /// <param name="val">The old string value to store.</param>
+    /// <param name="oldval">The old string value to store for undo.</param>
+    /// <param name="newval">The new string value to store for redo.</param>
     /// <returns>The LSN of the new log record.</returns>
-    public static int WriteToLog(LogMgr lm, int txnum, BlockId blk, int offset, string val)
+    public static int WriteToLog(LogMgr lm, int txnum, BlockId blk, int offset, string oldval, string newval)
     {
         int tpos = sizeof(int);
         int fpos = tpos + sizeof(int);
         int bpos = fpos + Page.MaxLength(blk.FileName().Length);
         int opos = bpos + sizeof(int);
-        int vpos = opos + sizeof(int);
-        int reclen = vpos + Page.MaxLength(val.Length);
+        int ovpos = opos + sizeof(int);
+        int nvpos = ovpos + Page.MaxLength(oldval.Length);
+        int reclen = nvpos + Page.MaxLength(newval.Length);
         byte[] rec = new byte[reclen];
         Page p = new Page(rec);
         p.SetInt(0, LogRecord.SETSTRING);
@@ -358,19 +394,21 @@ public class SetStringRecord : LogRecord
         p.SetString(fpos, blk.FileName());
         p.SetInt(bpos, blk.Number());
         p.SetInt(opos, offset);
-        p.SetString(vpos, val);
+        p.SetString(ovpos, oldval);
+        p.SetString(nvpos, newval);
         return lm.Append(rec);
     }
 }
 
 /// <summary>
-/// A log record that captures an integer update. Stores the old value so the change can be undone.
-/// Layout: [SETINT][txnum][filename][blocknum][offset][old value]
+/// A log record that captures an integer update. Stores both old and new values for undo/redo.
+/// Layout: [SETINT][txnum][filename][blocknum][offset][old value][new value]
 /// </summary>
 public class SetIntRecord : LogRecord
 {
     private int _txnum, _offset;
-    private int _val;
+    private int _oldval;
+    private int _newval;
     private BlockId _blk;
 
     /// <summary>
@@ -392,8 +430,11 @@ public class SetIntRecord : LogRecord
         int opos = bpos + sizeof(int);
         _offset = p.GetInt(opos);
 
-        int vpos = opos + sizeof(int);
-        _val = p.GetInt(vpos);
+        int ovpos = opos + sizeof(int);
+        _oldval = p.GetInt(ovpos);
+
+        int nvpos = ovpos + sizeof(int);
+        _newval = p.GetInt(nvpos);
     }
 
     /// <inheritdoc/>
@@ -411,7 +452,7 @@ public class SetIntRecord : LogRecord
     /// <inheritdoc/>
     public override string ToString()
     {
-        return "<SETINT " + _txnum + " " + _blk + " " + _offset + " " + _val + ">";
+        return "<SETINT " + _txnum + " " + _blk + " " + _offset + " " + _oldval + " " + _newval + ">";
     }
 
     /// <summary>
@@ -422,27 +463,41 @@ public class SetIntRecord : LogRecord
     public void Undo(Transaction tx)
     {
         tx.Pin(_blk);
-        tx.SetInt(_blk, _offset, _val, false);
+        tx.SetInt(_blk, _offset, _oldval, false);
         tx.Unpin(_blk);
     }
 
     /// <summary>
-    /// Writes a SETINT record to the log, capturing the old value for undo.
+    /// Re-applies the new integer value by pinning the block, writing the new value,
+    /// and unpinning. The redo itself is not logged.
+    /// </summary>
+    /// <param name="tx">The transaction used to perform the redo.</param>
+    public void Redo(Transaction tx)
+    {
+        tx.Pin(_blk);
+        tx.SetInt(_blk, _offset, _newval, false);
+        tx.Unpin(_blk);
+    }
+
+    /// <summary>
+    /// Writes a SETINT record to the log, capturing both old and new values.
     /// </summary>
     /// <param name="lm">The log manager.</param>
     /// <param name="txnum">The transaction number.</param>
     /// <param name="blk">The block being modified.</param>
     /// <param name="offset">The byte offset within the block.</param>
-    /// <param name="val">The old integer value to store.</param>
+    /// <param name="oldval">The old integer value to store for undo.</param>
+    /// <param name="newval">The new integer value to store for redo.</param>
     /// <returns>The LSN of the new log record.</returns>
-    public static int WriteToLog(LogMgr lm, int txnum, BlockId blk, int offset, int val)
+    public static int WriteToLog(LogMgr lm, int txnum, BlockId blk, int offset, int oldval, int newval)
     {
         int tpos = sizeof(int);
         int fpos = tpos + sizeof(int);
         int bpos = fpos + Page.MaxLength(blk.FileName().Length);
         int opos = bpos + sizeof(int);
-        int vpos = opos + sizeof(int);
-        int reclen = vpos + sizeof(int);
+        int ovpos = opos + sizeof(int);
+        int nvpos = ovpos + sizeof(int);
+        int reclen = nvpos + sizeof(int);
         byte[] rec = new byte[reclen];
         Page p = new Page(rec);
         p.SetInt(0, LogRecord.SETINT);
@@ -450,7 +505,8 @@ public class SetIntRecord : LogRecord
         p.SetString(fpos, blk.FileName());
         p.SetInt(bpos, blk.Number());
         p.SetInt(opos, offset);
-        p.SetInt(vpos, val);
+        p.SetInt(ovpos, oldval);
+        p.SetInt(nvpos, newval);
         return lm.Append(rec);
     }
 }
@@ -517,6 +573,9 @@ public class NQCheckpointRecord : LogRecord
     /// <summary>No-op; checkpoints cannot be undone.</summary>
     public void Undo(Transaction tx) { }
 
+    /// <summary>No-op; checkpoints cannot be redone.</summary>
+    public void Redo(Transaction tx) { }
+
     /// <summary>
     /// Writes a NQCHECKPOINT record to the log with the list of active transactions.
     /// </summary>
@@ -582,6 +641,15 @@ public class AppendRecord : LogRecord
     public void Undo(Transaction tx)
     {
         tx.Truncate(_filename);
+    }
+
+    /// <summary>
+    /// Redoes the append by appending a new block to the file.
+    /// </summary>
+    /// <param name="tx">The transaction used to perform the redo.</param>
+    public void Redo(Transaction tx)
+    {
+        tx.Append(_filename);
     }
 
     /// <summary>

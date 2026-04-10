@@ -6,10 +6,11 @@ using Buffer = DBSharp.Buffers.Buffer;
 namespace DBSharp.Log;
 
 /// <summary>
-/// Handles transaction recovery using the write-ahead log. Provides commit, rollback,
-/// and crash-recovery operations by reading log records and undoing uncommitted changes.
+/// Undo-only recovery manager. Uses a force policy: all dirty buffers are flushed
+/// to disk at commit time. Recovery only requires an undo pass since committed
+/// data is always on disk.
 /// </summary>
-public class RecoveryMgr
+public class UndoOnlyRecoveryMgr : IRecoveryMgr
 {
     private LogMgr _lm;
     private IBufferMgr _bm;
@@ -23,7 +24,7 @@ public class RecoveryMgr
     /// <param name="txnum">The transaction number.</param>
     /// <param name="lm">The log manager.</param>
     /// <param name="bm">The buffer manager.</param>
-    public RecoveryMgr(Transaction tx, int txnum, LogMgr lm, IBufferMgr bm)
+    public UndoOnlyRecoveryMgr(Transaction tx, int txnum, LogMgr lm, IBufferMgr bm)
     {
         _tx = tx;
         _txnum = txnum;
@@ -76,7 +77,7 @@ public class RecoveryMgr
     {
         int oldval = buff.Contents().GetInt(offset);
         BlockId blk = buff.Block();
-        return SetIntRecord.WriteToLog(_lm, _txnum, blk, offset, oldval);
+        return SetIntRecord.WriteToLog(_lm, _txnum, blk, offset, oldval, newval);
     }
 
     /// <summary>
@@ -90,7 +91,7 @@ public class RecoveryMgr
     {
         string oldval = buff.Contents().GetString(offset);
         BlockId blk = buff.Block();
-        return SetStringRecord.WriteToLog(_lm, _txnum, blk, offset, oldval);
+        return SetStringRecord.WriteToLog(_lm, _txnum, blk, offset, oldval, newval);
     }
 
     /// <summary>
@@ -106,7 +107,7 @@ public class RecoveryMgr
     private void DoRollback()
     {
         // iterate in reverse order
-        foreach (byte[] bytes in _lm.GetEnumerator())
+        foreach (byte[] bytes in _lm.GetBackwardEnumerator())
         {
             LogRecord rec = LogRecord.CreateLogRecord(bytes);
             // if the record is by the corresponding transaction
@@ -128,7 +129,7 @@ public class RecoveryMgr
         // We must keep scanning back until we find all their START records.
         HashSet<int> unresolvedTxns = null;
         // iterate in reverse order
-        foreach (byte[] bytes in _lm.GetEnumerator())
+        foreach (byte[] bytes in _lm.GetBackwardEnumerator())
         {
             LogRecord rec = LogRecord.CreateLogRecord(bytes);
             // iterate until it reaches CHECKPOINT record
