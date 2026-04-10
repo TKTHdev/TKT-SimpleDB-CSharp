@@ -1633,6 +1633,300 @@ static void Recovery_AppendAfterCommitAndRollback()
     txRead.Commit();
 }
 
+// ── UndoRedo recovery tests ──
+
+static Transaction NewUndoRedoTx(FileMgr fm, LogMgr lm, IBufferMgr bm)
+{
+    return new Transaction(fm, lm, bm, useUndoRedo: true);
+}
+
+static void UndoRedo_CommitAndRecover()
+{
+    var dbPath = CreateDirectory();
+    var fm = new FileMgr(new DirectoryInfo(dbPath), 400);
+    string file = TxTestFile();
+    BlockId blk;
+
+    // tx1: write int and string, then commit (no-force: buffers may not be on disk)
+    {
+        var lm = new LogMgr(fm, "simpledb.log");
+        var bm = new BufferMgr(fm, lm, 8);
+        var tx1 = NewUndoRedoTx(fm, lm, bm);
+        blk = tx1.Append(file);
+        tx1.Pin(blk);
+        tx1.SetInt(blk, 0, 42, true);
+        tx1.SetString(blk, 80, "hello", true);
+        tx1.Commit();
+    }
+
+    // simulate restart: new LogMgr/BufferMgr on same FileMgr
+    ConcurrencyMgr.ResetLockTable();
+    {
+        var lm = new LogMgr(fm, "simpledb.log");
+        var bm = new BufferMgr(fm, lm, 8);
+
+        // recovery should redo the committed data
+        var txR = NewUndoRedoTx(fm, lm, bm);
+        txR.Recover();
+
+        var txRead = NewUndoRedoTx(fm, lm, bm);
+        txRead.Pin(blk);
+        Assert.Equal(42, txRead.GetInt(blk, 0));
+        Assert.Equal("hello", txRead.GetString(blk, 80));
+        txRead.Commit();
+    }
+}
+
+static void UndoRedo_RecoverUndoesUncommitted()
+{
+    var dbPath = CreateDirectory();
+    var fm = new FileMgr(new DirectoryInfo(dbPath), 400);
+    string file = TxTestFile();
+    BlockId blk;
+
+    // tx1: write initial values and commit
+    // tx2: overwrite but do NOT commit (simulates crash)
+    {
+        var lm = new LogMgr(fm, "simpledb.log");
+        var bm = new BufferMgr(fm, lm, 8);
+        var tx1 = NewUndoRedoTx(fm, lm, bm);
+        blk = tx1.Append(file);
+        tx1.Pin(blk);
+        tx1.SetInt(blk, 0, 10, true);
+        tx1.Commit();
+
+        var tx2 = NewUndoRedoTx(fm, lm, bm);
+        tx2.Pin(blk);
+        tx2.SetInt(blk, 0, 999, true);
+        // no commit, no rollback — tx2 is in-flight
+        // flush so the dirty write is on disk (simulates crash with dirty data written)
+        bm.FlushAll();
+    }
+
+    // simulate restart
+    ConcurrencyMgr.ResetLockTable();
+    {
+        var lm = new LogMgr(fm, "simpledb.log");
+        var bm = new BufferMgr(fm, lm, 8);
+
+        var txR = NewUndoRedoTx(fm, lm, bm);
+        txR.Recover();
+
+        var txRead = NewUndoRedoTx(fm, lm, bm);
+        txRead.Pin(blk);
+        Assert.Equal(10, txRead.GetInt(blk, 0));
+        txRead.Commit();
+    }
+}
+
+static void UndoRedo_RollbackUndoes()
+{
+    var dbPath = CreateDirectory();
+    var fm = new FileMgr(new DirectoryInfo(dbPath), 400);
+    var lm = new LogMgr(fm, "simpledb.log");
+    var bm = new BufferMgr(fm, lm, 8);
+    string file = TxTestFile();
+
+    var tx1 = NewUndoRedoTx(fm, lm, bm);
+    BlockId blk = tx1.Append(file);
+    tx1.Pin(blk);
+    tx1.SetInt(blk, 0, 10, true);
+    tx1.SetString(blk, 80, "original", true);
+    tx1.Commit();
+
+    // tx2: overwrite and rollback
+    var tx2 = NewUndoRedoTx(fm, lm, bm);
+    tx2.Pin(blk);
+    tx2.SetInt(blk, 0, 999, true);
+    tx2.SetString(blk, 80, "changed", true);
+    tx2.Rollback();
+
+    var txRead = NewUndoRedoTx(fm, lm, bm);
+    txRead.Pin(blk);
+    Assert.Equal(10, txRead.GetInt(blk, 0));
+    Assert.Equal("original", txRead.GetString(blk, 80));
+    txRead.Commit();
+}
+
+static void UndoRedo_RecoverAfterCommitAndRollback()
+{
+    var dbPath = CreateDirectory();
+    var fm = new FileMgr(new DirectoryInfo(dbPath), 400);
+    string file = TxTestFile();
+    BlockId blk;
+
+    {
+        var lm = new LogMgr(fm, "simpledb.log");
+        var bm = new BufferMgr(fm, lm, 8);
+
+        // tx1: write initial values and commit
+        var tx1 = NewUndoRedoTx(fm, lm, bm);
+        blk = tx1.Append(file);
+        tx1.Pin(blk);
+        tx1.SetInt(blk, 0, 10, true);
+        tx1.SetInt(blk, 40, 20, true);
+        tx1.Commit();
+
+        // tx2: overwrite offset 0 and commit
+        var tx2 = NewUndoRedoTx(fm, lm, bm);
+        tx2.Pin(blk);
+        tx2.SetInt(blk, 0, 50, true);
+        tx2.Commit();
+
+        // tx3: overwrite offset 40 and rollback
+        var tx3 = NewUndoRedoTx(fm, lm, bm);
+        tx3.Pin(blk);
+        tx3.SetInt(blk, 40, 999, true);
+        tx3.Rollback();
+    }
+
+    // simulate restart
+    ConcurrencyMgr.ResetLockTable();
+    {
+        var lm = new LogMgr(fm, "simpledb.log");
+        var bm = new BufferMgr(fm, lm, 8);
+
+        var txR = NewUndoRedoTx(fm, lm, bm);
+        txR.Recover();
+
+        var txRead = NewUndoRedoTx(fm, lm, bm);
+        txRead.Pin(blk);
+        Assert.Equal(50, txRead.GetInt(blk, 0));   // tx2 committed
+        Assert.Equal(20, txRead.GetInt(blk, 40));   // tx3 rolled back
+        txRead.Commit();
+    }
+}
+
+static void UndoRedo_RecoverIdempotent()
+{
+    var dbPath = CreateDirectory();
+    var fm = new FileMgr(new DirectoryInfo(dbPath), 400);
+    string file = TxTestFile();
+    BlockId blk;
+
+    {
+        var lm = new LogMgr(fm, "simpledb.log");
+        var bm = new BufferMgr(fm, lm, 8);
+        var tx1 = NewUndoRedoTx(fm, lm, bm);
+        blk = tx1.Append(file);
+        tx1.Pin(blk);
+        tx1.SetInt(blk, 0, 77, true);
+        tx1.SetString(blk, 80, "stable", true);
+        tx1.Commit();
+    }
+
+    // run recovery twice from fresh restarts — result should be the same
+    ConcurrencyMgr.ResetLockTable();
+    {
+        var lm = new LogMgr(fm, "simpledb.log");
+        var bm = new BufferMgr(fm, lm, 8);
+        var txR1 = NewUndoRedoTx(fm, lm, bm);
+        txR1.Recover();
+    }
+
+    ConcurrencyMgr.ResetLockTable();
+    {
+        var lm = new LogMgr(fm, "simpledb.log");
+        var bm = new BufferMgr(fm, lm, 8);
+        var txR2 = NewUndoRedoTx(fm, lm, bm);
+        txR2.Recover();
+
+        var txRead = NewUndoRedoTx(fm, lm, bm);
+        txRead.Pin(blk);
+        Assert.Equal(77, txRead.GetInt(blk, 0));
+        Assert.Equal("stable", txRead.GetString(blk, 80));
+        txRead.Commit();
+    }
+}
+
+static void UndoRedo_RecoverStopsAtCheckpoint()
+{
+    var dbPath = CreateDirectory();
+    var fm = new FileMgr(new DirectoryInfo(dbPath), 400);
+    string file = TxTestFile();
+    BlockId blk;
+
+    {
+        var lm = new LogMgr(fm, "simpledb.log");
+        var bm = new BufferMgr(fm, lm, 8);
+
+        // tx1: write and commit
+        var tx1 = NewUndoRedoTx(fm, lm, bm);
+        blk = tx1.Append(file);
+        tx1.Pin(blk);
+        tx1.SetInt(blk, 0, 100, true);
+        tx1.Commit();
+
+        // first recovery — writes a CHECKPOINT
+        var txR1 = NewUndoRedoTx(fm, lm, bm);
+        txR1.Recover();
+
+        // tx2: write new value after checkpoint and commit
+        var tx2 = NewUndoRedoTx(fm, lm, bm);
+        tx2.Pin(blk);
+        tx2.SetInt(blk, 0, 200, true);
+        tx2.Commit();
+
+        // tx3: overwrite and rollback
+        var tx3 = NewUndoRedoTx(fm, lm, bm);
+        tx3.Pin(blk);
+        tx3.SetInt(blk, 0, 999, true);
+        tx3.Rollback();
+    }
+
+    // simulate restart
+    ConcurrencyMgr.ResetLockTable();
+    {
+        var lm = new LogMgr(fm, "simpledb.log");
+        var bm = new BufferMgr(fm, lm, 8);
+
+        // second recovery — should only scan back to CHECKPOINT
+        var txR2 = NewUndoRedoTx(fm, lm, bm);
+        txR2.Recover();
+
+        var txRead = NewUndoRedoTx(fm, lm, bm);
+        txRead.Pin(blk);
+        Assert.Equal(200, txRead.GetInt(blk, 0));
+        txRead.Commit();
+    }
+}
+
+static void UndoRedo_RecoverAppend()
+{
+    var dbPath = CreateDirectory();
+    var fm = new FileMgr(new DirectoryInfo(dbPath), 400);
+    string file = TxTestFile();
+
+    {
+        var lm = new LogMgr(fm, "simpledb.log");
+        var bm = new BufferMgr(fm, lm, 8);
+
+        // tx1: append and commit
+        var tx1 = NewUndoRedoTx(fm, lm, bm);
+        tx1.Append(file);
+        tx1.Commit();
+
+        // tx2: append and rollback
+        var tx2 = NewUndoRedoTx(fm, lm, bm);
+        tx2.Append(file);
+        tx2.Rollback();
+    }
+
+    // simulate restart
+    ConcurrencyMgr.ResetLockTable();
+    {
+        var lm = new LogMgr(fm, "simpledb.log");
+        var bm = new BufferMgr(fm, lm, 8);
+
+        var txR = NewUndoRedoTx(fm, lm, bm);
+        txR.Recover();
+
+        var txRead = NewUndoRedoTx(fm, lm, bm);
+        Assert.Equal(1, txRead.Size(file));
+        txRead.Commit();
+    }
+}
+
 static string CreateDirectory()
 {
     var path = UniqueDirectoryPath();
