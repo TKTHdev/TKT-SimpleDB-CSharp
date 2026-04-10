@@ -38,6 +38,12 @@ public interface LogRecord
     void Undo(Transaction tx);
 
     /// <summary>
+    /// Redoes the operation described by this log record against the given transaction.
+    /// </summary>
+    /// <param name="tx">The transaction to apply the redo to.</param>
+    void Redo(Transaction tx);
+
+    /// <summary>
     /// Factory method that deserializes a raw byte array into the appropriate <see cref="LogRecord"/> subtype.
     /// </summary>
     /// <param name="bytes">The raw bytes of the log record.</param>
@@ -97,6 +103,9 @@ public class CheckpointRecord : LogRecord
     /// <summary>No-op; checkpoints cannot be undone.</summary>
     public void Undo(Transaction tx) { }
 
+    /// <summary>No-op; checkpoints cannot be redone.</summary>
+    public void Redo(Transaction tx) { }
+
     /// <summary>
     /// Writes a CHECKPOINT record to the log and returns its LSN.
     /// </summary>
@@ -147,6 +156,9 @@ public class StartRecord : LogRecord
 
     /// <summary>No-op; START records cannot be undone.</summary>
     public void Undo(Transaction tx) { }
+
+    /// <summary>No-op; START records cannot be redone.</summary>
+    public void Redo(Transaction tx) { }
 
     /// <summary>
     /// Writes a START record for the given transaction to the log.
@@ -201,6 +213,9 @@ public class CommitRecord : LogRecord
     /// <summary>No-op; COMMIT records cannot be undone.</summary>
     public void Undo(Transaction tx) { }
 
+    /// <summary>No-op; COMMIT records cannot be redone.</summary>
+    public void Redo(Transaction tx) { }
+
     /// <summary>
     /// Writes a COMMIT record for the given transaction to the log.
     /// </summary>
@@ -254,6 +269,9 @@ public class RollbackRecord : LogRecord
     /// <summary>No-op; ROLLBACK records cannot be undone.</summary>
     public void Undo(Transaction tx) { }
 
+    /// <summary>No-op; ROLLBACK records cannot be redone.</summary>
+    public void Redo(Transaction tx) { }
+
     /// <summary>
     /// Writes a ROLLBACK record for the given transaction to the log.
     /// </summary>
@@ -270,8 +288,8 @@ public class RollbackRecord : LogRecord
 }
 
 /// <summary>
-/// A log record that captures a string update. Stores the old value so the change can be undone.
-/// Layout: [SETSTRING][txnum][filename][blocknum][offset][old value]
+/// A log record that captures a string update. Stores both old and new values for undo/redo.
+/// Layout: [SETSTRING][txnum][filename][blocknum][offset][old value][new value]
 /// </summary>
 public class SetStringRecord : LogRecord
 {
@@ -339,7 +357,19 @@ public class SetStringRecord : LogRecord
     }
 
     /// <summary>
-    /// Writes a SETSTRING record to the log, capturing the old value for undo.
+    /// Re-applies the new string value by pinning the block, writing the new value,
+    /// and unpinning. The redo itself is not logged.
+    /// </summary>
+    /// <param name="tx">The transaction used to perform the redo.</param>
+    public void Redo(Transaction tx)
+    {
+        tx.Pin(_blk);
+        tx.SetString(_blk, _offset, _newval, false); // don't log the redo!
+        tx.Unpin(_blk);
+    }
+
+    /// <summary>
+    /// Writes a SETSTRING record to the log, capturing both old and new values.
     /// </summary>
     /// <param name="lm">The log manager.</param>
     /// <param name="txnum">The transaction number.</param>
@@ -371,8 +401,8 @@ public class SetStringRecord : LogRecord
 }
 
 /// <summary>
-/// A log record that captures an integer update. Stores the old value so the change can be undone.
-/// Layout: [SETINT][txnum][filename][blocknum][offset][old value]
+/// A log record that captures an integer update. Stores both old and new values for undo/redo.
+/// Layout: [SETINT][txnum][filename][blocknum][offset][old value][new value]
 /// </summary>
 public class SetIntRecord : LogRecord
 {
@@ -438,7 +468,19 @@ public class SetIntRecord : LogRecord
     }
 
     /// <summary>
-    /// Writes a SETINT record to the log, capturing the old value for undo.
+    /// Re-applies the new integer value by pinning the block, writing the new value,
+    /// and unpinning. The redo itself is not logged.
+    /// </summary>
+    /// <param name="tx">The transaction used to perform the redo.</param>
+    public void Redo(Transaction tx)
+    {
+        tx.Pin(_blk);
+        tx.SetInt(_blk, _offset, _newval, false);
+        tx.Unpin(_blk);
+    }
+
+    /// <summary>
+    /// Writes a SETINT record to the log, capturing both old and new values.
     /// </summary>
     /// <param name="lm">The log manager.</param>
     /// <param name="txnum">The transaction number.</param>
@@ -531,6 +573,9 @@ public class NQCheckpointRecord : LogRecord
     /// <summary>No-op; checkpoints cannot be undone.</summary>
     public void Undo(Transaction tx) { }
 
+    /// <summary>No-op; checkpoints cannot be redone.</summary>
+    public void Redo(Transaction tx) { }
+
     /// <summary>
     /// Writes a NQCHECKPOINT record to the log with the list of active transactions.
     /// </summary>
@@ -596,6 +641,15 @@ public class AppendRecord : LogRecord
     public void Undo(Transaction tx)
     {
         tx.Truncate(_filename);
+    }
+
+    /// <summary>
+    /// Redoes the append by appending a new block to the file.
+    /// </summary>
+    /// <param name="tx">The transaction used to perform the redo.</param>
+    public void Redo(Transaction tx)
+    {
+        tx.Append(_filename);
     }
 
     /// <summary>
