@@ -4,6 +4,12 @@ using DBSharp.Transactions;
 using DBSharp.File;
 namespace DBSharp.Log;
 
+/// <summary>
+/// Undo/Redo recovery manager. Unlike <see cref="UndoOnlyRecoveryMgr"/>, this manager
+/// uses a no-force policy: committed data does not need to be flushed to disk at commit time.
+/// Instead, committed changes are replayed during recovery (redo pass), while uncommitted
+/// changes are reverted (undo pass). Log records store both old and new values.
+/// </summary>
 public class UndoRedoRecoveryMgr : IRecoveryMgr
 {
     private LogMgr _lm;
@@ -11,6 +17,13 @@ public class UndoRedoRecoveryMgr : IRecoveryMgr
     private Transaction _tx;
     private int _txnum;
 
+    /// <summary>
+    /// Initializes the recovery manager for the given transaction and writes a START record to the log.
+    /// </summary>
+    /// <param name="tx">The owning transaction.</param>
+    /// <param name="txnum">The transaction number.</param>
+    /// <param name="lm">The log manager for WAL operations.</param>
+    /// <param name="bm">The buffer manager for buffer pool access.</param>
     public  UndoRedoRecoveryMgr(Transaction tx, int txnum, LogMgr lm, IBufferMgr bm)
     {
        _tx = tx;
@@ -19,6 +32,11 @@ public class UndoRedoRecoveryMgr : IRecoveryMgr
        _bm = bm;
        StartRecord.WriteToLog(lm, txnum);
     }
+
+    /// <summary>
+    /// Commits the transaction by writing a COMMIT record and flushing the log.
+    /// Unlike undo-only recovery, modified buffers are not forced to disk.
+    /// </summary>
     public void Commit()
     {
         // unlike undo-only recovery,
@@ -27,6 +45,10 @@ public class UndoRedoRecoveryMgr : IRecoveryMgr
         _lm.Flush(lsn);
     }
 
+    /// <summary>
+    /// Rolls back the transaction by undoing all its changes, then writing a ROLLBACK record.
+    /// Modified buffers are not forced to disk since redo will replay them if needed.
+    /// </summary>
     public void Rollback()
     {
         DoRollback();
@@ -36,6 +58,11 @@ public class UndoRedoRecoveryMgr : IRecoveryMgr
         _lm.Flush(lsn);
     }
 
+    /// <summary>
+    /// Performs crash recovery: runs an undo pass to revert uncommitted transactions
+    /// and a redo pass to replay committed transactions, then flushes all buffers
+    /// and writes a CHECKPOINT record.
+    /// </summary>
     public void Recover()
     {
         DoRecover();
@@ -44,6 +71,14 @@ public class UndoRedoRecoveryMgr : IRecoveryMgr
         _lm.Flush(lsn);
     }
 
+    /// <summary>
+    /// Logs a SETINT record capturing both the old and new integer values
+    /// for the specified buffer and offset.
+    /// </summary>
+    /// <param name="buff">The buffer being modified.</param>
+    /// <param name="offset">The byte offset within the block.</param>
+    /// <param name="newval">The new integer value.</param>
+    /// <returns>The LSN of the new log record.</returns>
     public int SetInt(Buffer buff, int offset, int newval)
     {
         int oldval = buff.Contents().GetInt(offset);
@@ -51,18 +86,35 @@ public class UndoRedoRecoveryMgr : IRecoveryMgr
         return SetIntRecord.WriteToLog(_lm, _txnum, blk, offset, oldval, newval);
     }
 
+    /// <summary>
+    /// Logs a SETSTRING record capturing both the old and new string values
+    /// for the specified buffer and offset.
+    /// </summary>
+    /// <param name="buff">The buffer being modified.</param>
+    /// <param name="offset">The byte offset within the block.</param>
+    /// <param name="newval">The new string value.</param>
+    /// <returns>The LSN of the new log record.</returns>
     public int SetString(Buffer buff, int offset, string newval)
     {
         string oldval = buff.Contents().GetString(offset);
         BlockId blk = buff.Block();
-        return SetStringRecord.WriteToLog(_lm, _txnum, blk, offset, oldval, newval);   
+        return SetStringRecord.WriteToLog(_lm, _txnum, blk, offset, oldval, newval);
     }
 
+    /// <summary>
+    /// Logs an APPEND record for the specified file.
+    /// </summary>
+    /// <param name="filename">The name of the file being extended.</param>
+    /// <returns>The LSN of the new log record.</returns>
     public int Append(string filename)
     {
         return AppendRecord.WriteToLog(_lm, _txnum, filename);
     }
 
+    /// <summary>
+    /// Performs a backward scan of the log, undoing all changes made by this transaction
+    /// until the START record is reached.
+    /// </summary>
     private void DoRollback()
     {
         // iterate in reverse order
@@ -80,6 +132,20 @@ public class UndoRedoRecoveryMgr : IRecoveryMgr
         }
     }
 
+    /// <summary>
+    /// Performs two-pass crash recovery:
+    /// <list type="number">
+    ///   <item><description>
+    ///     Backward scan (undo pass): scans the log from end to beginning, undoing changes
+    ///     from uncommitted and non-rolled-back transactions while collecting records for redo.
+    ///     Stops at a CHECKPOINT or when all active transactions at a NQCHECKPOINT are resolved.
+    ///   </description></item>
+    ///   <item><description>
+    ///     Forward scan (redo pass): replays collected records for committed transactions
+    ///     to restore data that may not have been flushed to disk (no-force policy).
+    ///   </description></item>
+    /// </list>
+    /// </summary>
     private void DoRecover()
     {
         List<int> committedTxns = new List<int>();
