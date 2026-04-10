@@ -61,7 +61,7 @@ public class Transaction
         _recoveryMgr = useUndoRedo
             ? new UndoRedoRecoveryMgr(this, _txnum, lm, bm)
             : new UndoOnlyRecoveryMgr(this, _txnum, lm, bm);
-        _concurMgr = new ConcurrencyMgr();
+        _concurMgr = new ConcurrencyMgr(_txnum);
         _myBuffers = new BufferList(bm);
     }
 

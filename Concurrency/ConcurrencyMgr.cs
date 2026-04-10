@@ -11,6 +11,21 @@ public class ConcurrencyMgr
 {
     private static LockTable _lockTable = new LockTable();
     private Dictionary<BlockId, string> _locks = new Dictionary<BlockId, string>();
+    private int _txNum;
+
+    public ConcurrencyMgr(int txNum)
+    {
+        _txNum = txNum;
+    }
+
+    /// <summary>
+    /// Resets the global lock table. Used to simulate a database restart in tests,
+    /// where all in-flight transaction locks are lost.
+    /// </summary>
+    public static void ResetLockTable()
+    {
+        _lockTable = new LockTable();
+    }
 
     /// <summary>
     /// Acquires a shared lock on the specified block if one is not already held.
@@ -20,7 +35,7 @@ public class ConcurrencyMgr
     {
         if (!_locks.ContainsKey(blk))
         {
-            _lockTable.SLock(blk);
+            _lockTable.SLock(blk, _txNum);
             _locks[blk] = "S";
         }
     }
@@ -34,7 +49,7 @@ public class ConcurrencyMgr
         if (!HasXLock(blk))
         {
             SLock(blk);
-            _lockTable.XLock(blk);
+            _lockTable.XLock(blk, _txNum);
             _locks[blk] = "X";
         }
     }
@@ -45,7 +60,7 @@ public class ConcurrencyMgr
     public void Release()
     {
         foreach (BlockId blk in _locks.Keys)
-            _lockTable.Unlock(blk);
+            _lockTable.Unlock(blk, _txNum);
         _locks.Clear();
     }
 
