@@ -3,102 +3,107 @@ using DBSharp.File;
 namespace DBSharp.Concurrency;
 
 /// <summary>
-/// Global lock table that manages shared and exclusive locks on blocks.
-/// Lock values are stored as integers: positive values represent the number of
-/// shared locks held, and -1 represents an exclusive lock.
-/// The concurrency manager always acquires an SLock before requesting an XLock,
-/// so a value greater than 1 indicates that other transactions also hold shared locks.
+/// Global lock table that manages shared and exclusive locks on blocks
+/// using the wait-die deadlock prevention scheme.
+/// Each transaction is identified by its transaction number (txnum);
+/// a lower txnum means an older transaction.
+/// When a conflict occurs:
+///   - If the requester is older than the holder, it waits.
+///   - If the requester is younger than the holder, it dies (throws <see cref="LockAbortException"/>).
+/// This guarantees no deadlocks because younger transactions never wait for older ones.
 /// </summary>
 public class LockTable
 {
-    private static readonly long MAX_TIME = 10000; // 10 seconds
-    private Dictionary<BlockId, int> _locks = new Dictionary<BlockId, int>();
+    private Dictionary<BlockId, HashSet<int>> _sLockHolders = new();
+    private Dictionary<BlockId, int> _xLockHolder = new();
 
     /// <summary>
-    /// Acquires a shared lock on the specified block. Waits if an exclusive lock is held,
-    /// and throws <see cref="LockAbortException"/> if the wait times out.
+    /// Acquires a shared lock on the specified block using wait-die.
+    /// If an exclusive lock is held by a younger transaction, the requester waits.
+    /// If held by an older transaction, the requester dies.
     /// </summary>
     /// <param name="blk">The block to lock.</param>
-    /// <exception cref="LockAbortException">Thrown if the lock cannot be acquired within the timeout.</exception>
-    public void SLock(BlockId blk)
+    /// <param name="txNum">The transaction number of the requester.</param>
+    /// <exception cref="LockAbortException">Thrown if the requester is younger than the holder (die).</exception>
+    public void SLock(BlockId blk, int txNum)
     {
         lock (this)
         {
-            try
+            while (HasXLockByOther(blk, txNum))
             {
-                long timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-                while (HasXLock(blk) && !WaitingTooLong(timestamp))
-                    Monitor.Wait(this, TimeSpan.FromMilliseconds(MAX_TIME));
-                if (HasXLock(blk))
+                int holder = _xLockHolder[blk];
+                if (txNum < holder) // requester is older → wait
+                    Monitor.Wait(this);
+                else // requester is younger → die
                     throw new LockAbortException();
-                int val = GetLockVal(blk);
-                _locks[blk] = val + 1;
             }
-            catch
-            {
-                throw new LockAbortException();
-            }
+            if (!_sLockHolders.ContainsKey(blk))
+                _sLockHolders[blk] = new HashSet<int>();
+            _sLockHolders[blk].Add(txNum);
         }
     }
 
     /// <summary>
-    /// Acquires an exclusive lock on the specified block. Waits if other transactions
-    /// hold shared locks, and throws <see cref="LockAbortException"/> if the wait times out.
+    /// Acquires an exclusive lock on the specified block using wait-die.
+    /// The caller must already hold an SLock (lock upgrading).
+    /// If all other shared lock holders are younger, the requester waits.
+    /// If any holder is older, the requester dies.
     /// </summary>
     /// <param name="blk">The block to lock exclusively.</param>
-    /// <exception cref="LockAbortException">Thrown if the lock cannot be acquired within the timeout.</exception>
-    public void XLock(BlockId blk)
+    /// <param name="txNum">The transaction number of the requester.</param>
+    /// <exception cref="LockAbortException">Thrown if any holder is older than the requester (die).</exception>
+    public void XLock(BlockId blk, int txNum)
     {
         lock (this)
         {
-            long timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            while (HasOtherSLocks(blk) && !WaitingTooLong(timestamp))
-                Monitor.Wait(this, TimeSpan.FromMilliseconds(MAX_TIME));
-            if (HasOtherSLocks(blk))
-                throw new LockAbortException();
-            _locks[blk] = -1;
+            while (HasOtherSLocks(blk, txNum))
+            {
+                int oldestOther = OldestOtherSLockHolder(blk, txNum);
+                if (txNum < oldestOther) // requester is older than all others → wait
+                    Monitor.Wait(this);
+                else // requester is younger than some holder → die
+                    throw new LockAbortException();
+            }
+            _xLockHolder[blk] = txNum;
         }
     }
 
     /// <summary>
-    /// Releases one lock on the specified block. If this was the last shared lock (or an
-    /// exclusive lock), the entry is removed and a waiting thread is notified.
+    /// Releases the lock held by the specified transaction on the specified block.
+    /// Notifies all waiting threads so they can re-evaluate the wait-die condition.
     /// </summary>
     /// <param name="blk">The block to unlock.</param>
-    public void Unlock(BlockId blk)
+    /// <param name="txNum">The transaction number releasing the lock.</param>
+    public void Unlock(BlockId blk, int txNum)
     {
         lock (this)
         {
-            int val = GetLockVal(blk);
-            if (val > 1)
-                _locks[blk] = val - 1;
-            else
+            if (_xLockHolder.TryGetValue(blk, out int holder) && holder == txNum)
+                _xLockHolder.Remove(blk);
+            if (_sLockHolders.TryGetValue(blk, out var holders))
             {
-                _locks.Remove(blk);
-                Monitor.Pulse(this);
+                holders.Remove(txNum);
+                if (holders.Count == 0)
+                    _sLockHolders.Remove(blk);
             }
+            Monitor.PulseAll(this);
         }
     }
 
-    private bool HasXLock(BlockId blk)
+    private bool HasXLockByOther(BlockId blk, int txNum)
     {
-        return GetLockVal(blk) < 0;
-    }
-    private bool HasOtherSLocks(BlockId blk)
-    {
-        return GetLockVal(blk) > 1;
+        return _xLockHolder.TryGetValue(blk, out int holder) && holder != txNum;
     }
 
-    private bool WaitingTooLong(long startTime)
+    private bool HasOtherSLocks(BlockId blk, int txNum)
     {
-        long now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        return now - startTime > MAX_TIME;
+        if (!_sLockHolders.TryGetValue(blk, out var holders))
+            return false;
+        return holders.Any(h => h != txNum);
     }
 
-    // Unlike Java's Map.get() which returns null for missing keys,
-    // C# Dictionary[] throws KeyNotFoundException, so use TryGetValue.
-    private int GetLockVal(BlockId blk)
+    private int OldestOtherSLockHolder(BlockId blk, int txNum)
     {
-        return _locks.TryGetValue(blk, out int ival) ? ival : 0;
+        return _sLockHolders[blk].Where(h => h != txNum).Min();
     }
 }
