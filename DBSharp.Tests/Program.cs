@@ -266,7 +266,7 @@ static void LogMgr_CreateAndIterate()
     // printLogRecords – verify all 35 records, newest first
     {
         var records = new List<(string s, int n)>();
-        foreach (byte[] rec in lm.GetEnumerator())
+        foreach (byte[] rec in lm.GetBackwardEnumerator())
         {
             var p = new Page(rec);
             string s = p.GetString(0);
@@ -293,7 +293,7 @@ static void LogMgr_CreateAndIterate()
     // printLogRecords – verify all 70 records
     {
         var records = new List<(string s, int n)>();
-        foreach (byte[] rec in lm.GetEnumerator())
+        foreach (byte[] rec in lm.GetBackwardEnumerator())
         {
             var p = new Page(rec);
             string s = p.GetString(0);
@@ -1428,7 +1428,7 @@ static void Recovery_WritesCheckpointRecord()
 
     // scan the log for a CHECKPOINT record
     bool foundCheckpoint = false;
-    foreach (byte[] bytes in lm.GetEnumerator())
+    foreach (byte[] bytes in lm.GetBackwardEnumerator())
     {
         LogRecord rec = LogRecord.CreateLogRecord(bytes);
         if (rec.Op() == LogRecord.CHECKPOINT)
@@ -1558,7 +1558,7 @@ static void QuiescentCheckpoint_FlushesAndWritesRecord()
 
     // verify checkpoint record was written by scanning the log
     bool foundCheckpoint = false;
-    foreach (byte[] bytes in lm.GetEnumerator())
+    foreach (byte[] bytes in lm.GetBackwardEnumerator())
     {
         LogRecord rec = LogRecord.CreateLogRecord(bytes);
         if (rec.Op() == LogRecord.CHECKPOINT)
