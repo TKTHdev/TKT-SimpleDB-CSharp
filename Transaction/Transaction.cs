@@ -48,6 +48,9 @@ public class Transaction
     /// <param name="lm">The log manager for WAL operations.</param>
     /// <param name="bm">The buffer manager for buffer pool access.</param>
     public Transaction(FileMgr fm, LogMgr lm, IBufferMgr bm)
+        : this(fm, lm, bm, useUndoRedo: false) { }
+
+    public Transaction(FileMgr fm, LogMgr lm, IBufferMgr bm, bool useUndoRedo)
     {
         // wait when checkpointing is running
         _checkpointGate.Wait();
@@ -55,7 +58,9 @@ public class Transaction
         _bm = bm;
         _txnum = NextTxNumber();
         _runningTxns.TryAdd(_txnum, true);
-        _recoveryMgr = new UndoOnlyRecoveryMgr(this, _txnum, lm, bm);
+        _recoveryMgr = useUndoRedo
+            ? new UndoRedoRecoveryMgr(this, _txnum, lm, bm)
+            : new UndoOnlyRecoveryMgr(this, _txnum, lm, bm);
         _concurMgr = new ConcurrencyMgr();
         _myBuffers = new BufferList(bm);
     }
