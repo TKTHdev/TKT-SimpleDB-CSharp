@@ -69,6 +69,18 @@ var tests = new (string Name, Action Body)[]
     ("Recovery stops scanning at CHECKPOINT record", Recovery_StopsAtCheckpoint),
     ("Transaction Rollback undoes append", Transaction_RollbackUndoesAppend),
     ("Recovery preserves append state after commit and rollback", Recovery_AppendAfterCommitAndRollback),
+    ("UndoRedo commit does not force buffers but redo recovers data", UndoRedo_CommitAndRecover),
+    ("UndoRedo recovery undoes uncommitted transaction", UndoRedo_RecoverUndoesUncommitted),
+    ("UndoRedo rollback undoes changes", UndoRedo_RollbackUndoes),
+    ("UndoRedo recovery after commit and rollback", UndoRedo_RecoverAfterCommitAndRollback),
+    ("UndoRedo recovery is idempotent", UndoRedo_RecoverIdempotent),
+    ("UndoRedo recovery stops at CHECKPOINT", UndoRedo_RecoverStopsAtCheckpoint),
+    ("UndoRedo recovery handles append commit and rollback", UndoRedo_RecoverAppend),
+    ("WaitDie younger writer dies when older holds XLock", WaitDie_YoungerWriterDies),
+    ("WaitDie older reader waits for younger XLock holder then proceeds", WaitDie_OlderReaderWaitsForYoungerXLock),
+    ("WaitDie younger reader dies when older holds XLock", WaitDie_YoungerReaderDiesWhenOlderHoldsXLock),
+    ("WaitDie older writer waits for younger SLock holders then proceeds", WaitDie_OlderWriterWaitsForYoungerSLocks),
+    ("WaitDie younger writer dies when older holds SLock", WaitDie_YoungerWriterDiesWhenOlderHoldsSLock),
 };
 
 var failures = new List<string>();
@@ -266,7 +278,7 @@ static void LogMgr_CreateAndIterate()
     // printLogRecords – verify all 35 records, newest first
     {
         var records = new List<(string s, int n)>();
-        foreach (byte[] rec in lm.GetEnumerator())
+        foreach (byte[] rec in lm.GetBackwardEnumerator())
         {
             var p = new Page(rec);
             string s = p.GetString(0);
@@ -293,7 +305,7 @@ static void LogMgr_CreateAndIterate()
     // printLogRecords – verify all 70 records
     {
         var records = new List<(string s, int n)>();
-        foreach (byte[] rec in lm.GetEnumerator())
+        foreach (byte[] rec in lm.GetBackwardEnumerator())
         {
             var p = new Page(rec);
             string s = p.GetString(0);
@@ -992,9 +1004,9 @@ static void Transaction_XLockBlocksWriter()
     bool tx2Threw = false;
     var thread = new Thread(() =>
     {
+        var tx2 = new Transaction(fm, lm, bm);
         try
         {
-            var tx2 = new Transaction(fm, lm, bm);
             tx2.Pin(blk);
             tx2.SetInt(blk, 0, 3, true);
             tx2.Commit();
@@ -1002,6 +1014,7 @@ static void Transaction_XLockBlocksWriter()
         }
         catch (LockAbortException)
         {
+            tx2.Rollback();
             tx2Threw = true;
         }
     });
@@ -1037,23 +1050,25 @@ static void Transaction_XLockBlocksReader()
     setup.SetInt(blk, 0, 10, true);
     setup.Commit();
 
-    // tx1 takes XLock by writing
-    var tx1 = new Transaction(fm, lm, bm);
-    tx1.Pin(blk);
-    tx1.SetInt(blk, 0, 20, true);
+    // reader (older tx) is created first so it will wait under wait-die
+    var reader = new Transaction(fm, lm, bm);
+    reader.Pin(blk);
 
-    // tx2 tries to read the same block on another thread — should be blocked by XLock
+    // writer (younger tx) takes XLock
+    var writer = new Transaction(fm, lm, bm);
+    writer.Pin(blk);
+    writer.SetInt(blk, 0, 20, true);
+
+    // older reader tries to read — should wait (not die) under wait-die
     var readerStarted = new ManualResetEventSlim(false);
     int readValue = -1;
     bool readerDone = false;
     var thread = new Thread(() =>
     {
-        var tx2 = new Transaction(fm, lm, bm);
-        tx2.Pin(blk);
         readerStarted.Set();
-        // GetInt acquires SLock — blocked while tx1 holds XLock
-        readValue = tx2.GetInt(blk, 0);
-        tx2.Commit();
+        // GetInt acquires SLock — blocked while younger writer holds XLock
+        readValue = reader.GetInt(blk, 0);
+        reader.Commit();
         readerDone = true;
     });
     thread.Start();
@@ -1064,7 +1079,7 @@ static void Transaction_XLockBlocksReader()
     Assert.False(readerDone, "Reader should be blocked while writer holds XLock.");
 
     // release XLock
-    tx1.Commit();
+    writer.Commit();
     thread.Join(TimeSpan.FromSeconds(12));
 
     Assert.True(readerDone, "Reader should complete after writer commits.");
@@ -1082,7 +1097,11 @@ static void Transaction_SLockBlocksWriter()
     setup.SetInt(blk, 0, 10, true);
     setup.Commit();
 
-    // two readers hold SLock
+    // writer (older tx) is created first so it will wait under wait-die
+    var writer = new Transaction(fm, lm, bm);
+    writer.Pin(blk);
+
+    // two younger readers hold SLock
     var reader1 = new Transaction(fm, lm, bm);
     reader1.Pin(blk);
     Assert.Equal(10, reader1.GetInt(blk, 0));
@@ -1091,15 +1110,13 @@ static void Transaction_SLockBlocksWriter()
     reader2.Pin(blk);
     Assert.Equal(10, reader2.GetInt(blk, 0));
 
-    // writer on another thread tries to get XLock — blocked by SLocks
+    // older writer on another thread tries to get XLock — waits for younger SLocks
     var writerStarted = new ManualResetEventSlim(false);
     bool writerDone = false;
     var thread = new Thread(() =>
     {
-        var writer = new Transaction(fm, lm, bm);
-        writer.Pin(blk);
         writerStarted.Set();
-        // SetInt acquires XLock — blocked while readers hold SLock
+        // SetInt acquires XLock — blocked while younger readers hold SLock
         writer.SetInt(blk, 0, 99, true);
         writer.Commit();
         writerDone = true;
@@ -1133,21 +1150,23 @@ static void Transaction_CommitUnblocksWaiter()
     setup.SetInt(blk, 0, 1, true);
     setup.Commit();
 
-    // tx1 holds XLock
-    var tx1 = new Transaction(fm, lm, bm);
-    tx1.Pin(blk);
-    tx1.SetInt(blk, 0, 2, true);
+    // waiter (older tx) is created first so it will wait under wait-die
+    var waiter = new Transaction(fm, lm, bm);
+    waiter.Pin(blk);
+
+    // holder (younger tx) takes XLock
+    var holder = new Transaction(fm, lm, bm);
+    holder.Pin(blk);
+    holder.SetInt(blk, 0, 2, true);
 
     var waiterStarted = new ManualResetEventSlim(false);
     bool waiterDone = false;
     int waiterRead = -1;
     var thread = new Thread(() =>
     {
-        var tx2 = new Transaction(fm, lm, bm);
-        tx2.Pin(blk);
         waiterStarted.Set();
-        waiterRead = tx2.GetInt(blk, 0);
-        tx2.Commit();
+        waiterRead = waiter.GetInt(blk, 0);
+        waiter.Commit();
         waiterDone = true;
     });
     thread.Start();
@@ -1157,7 +1176,7 @@ static void Transaction_CommitUnblocksWaiter()
     Assert.False(waiterDone, "Waiter should be blocked.");
 
     // commit unblocks the waiter
-    tx1.Commit();
+    holder.Commit();
     thread.Join(TimeSpan.FromSeconds(12));
 
     Assert.True(waiterDone, "Waiter should proceed after commit.");
@@ -1175,21 +1194,23 @@ static void Transaction_RollbackUnblocksWaiter()
     setup.SetInt(blk, 0, 1, true);
     setup.Commit();
 
-    // tx1 holds XLock
-    var tx1 = new Transaction(fm, lm, bm);
-    tx1.Pin(blk);
-    tx1.SetInt(blk, 0, 2, true);
+    // waiter (older tx) is created first so it will wait under wait-die
+    var waiter = new Transaction(fm, lm, bm);
+    waiter.Pin(blk);
+
+    // holder (younger tx) takes XLock
+    var holder = new Transaction(fm, lm, bm);
+    holder.Pin(blk);
+    holder.SetInt(blk, 0, 2, true);
 
     var waiterStarted = new ManualResetEventSlim(false);
     bool waiterDone = false;
     int waiterRead = -1;
     var thread = new Thread(() =>
     {
-        var tx2 = new Transaction(fm, lm, bm);
-        tx2.Pin(blk);
         waiterStarted.Set();
-        waiterRead = tx2.GetInt(blk, 0);
-        tx2.Commit();
+        waiterRead = waiter.GetInt(blk, 0);
+        waiter.Commit();
         waiterDone = true;
     });
     thread.Start();
@@ -1199,7 +1220,7 @@ static void Transaction_RollbackUnblocksWaiter()
     Assert.False(waiterDone, "Waiter should be blocked.");
 
     // rollback releases locks and undoes changes
-    tx1.Rollback();
+    holder.Rollback();
     thread.Join(TimeSpan.FromSeconds(12));
 
     Assert.True(waiterDone, "Waiter should proceed after rollback.");
@@ -1230,9 +1251,9 @@ static void Transaction_WritersSerialized()
         threads[i] = new Thread(() =>
         {
             barrier.Wait();
+            var tx = new Transaction(fm, lm, bm);
             try
             {
-                var tx = new Transaction(fm, lm, bm);
                 tx.Pin(blk);
                 int current = tx.GetInt(blk, 0);
                 tx.SetInt(blk, 0, current + 1, true);
@@ -1241,7 +1262,8 @@ static void Transaction_WritersSerialized()
             }
             catch (LockAbortException)
             {
-                // timed out waiting for lock — acceptable under contention
+                tx.Rollback();
+                // died under wait-die — acceptable under contention
             }
         });
         threads[i].Start();
@@ -1428,7 +1450,7 @@ static void Recovery_WritesCheckpointRecord()
 
     // scan the log for a CHECKPOINT record
     bool foundCheckpoint = false;
-    foreach (byte[] bytes in lm.GetEnumerator())
+    foreach (byte[] bytes in lm.GetBackwardEnumerator())
     {
         LogRecord rec = LogRecord.CreateLogRecord(bytes);
         if (rec.Op() == LogRecord.CHECKPOINT)
@@ -1558,7 +1580,7 @@ static void QuiescentCheckpoint_FlushesAndWritesRecord()
 
     // verify checkpoint record was written by scanning the log
     bool foundCheckpoint = false;
-    foreach (byte[] bytes in lm.GetEnumerator())
+    foreach (byte[] bytes in lm.GetBackwardEnumerator())
     {
         LogRecord rec = LogRecord.CreateLogRecord(bytes);
         if (rec.Op() == LogRecord.CHECKPOINT)
@@ -1623,6 +1645,300 @@ static void Recovery_AppendAfterCommitAndRollback()
     txRead.Commit();
 }
 
+// ── UndoRedo recovery tests ──
+
+static Transaction NewUndoRedoTx(FileMgr fm, LogMgr lm, IBufferMgr bm)
+{
+    return new Transaction(fm, lm, bm, useUndoRedo: true);
+}
+
+static void UndoRedo_CommitAndRecover()
+{
+    var dbPath = CreateDirectory();
+    var fm = new FileMgr(new DirectoryInfo(dbPath), 400);
+    string file = TxTestFile();
+    BlockId blk;
+
+    // tx1: write int and string, then commit (no-force: buffers may not be on disk)
+    {
+        var lm = new LogMgr(fm, "simpledb.log");
+        var bm = new BufferMgr(fm, lm, 8);
+        var tx1 = NewUndoRedoTx(fm, lm, bm);
+        blk = tx1.Append(file);
+        tx1.Pin(blk);
+        tx1.SetInt(blk, 0, 42, true);
+        tx1.SetString(blk, 80, "hello", true);
+        tx1.Commit();
+    }
+
+    // simulate restart: new LogMgr/BufferMgr on same FileMgr
+    ConcurrencyMgr.ResetLockTable();
+    {
+        var lm = new LogMgr(fm, "simpledb.log");
+        var bm = new BufferMgr(fm, lm, 8);
+
+        // recovery should redo the committed data
+        var txR = NewUndoRedoTx(fm, lm, bm);
+        txR.Recover();
+
+        var txRead = NewUndoRedoTx(fm, lm, bm);
+        txRead.Pin(blk);
+        Assert.Equal(42, txRead.GetInt(blk, 0));
+        Assert.Equal("hello", txRead.GetString(blk, 80));
+        txRead.Commit();
+    }
+}
+
+static void UndoRedo_RecoverUndoesUncommitted()
+{
+    var dbPath = CreateDirectory();
+    var fm = new FileMgr(new DirectoryInfo(dbPath), 400);
+    string file = TxTestFile();
+    BlockId blk;
+
+    // tx1: write initial values and commit
+    // tx2: overwrite but do NOT commit (simulates crash)
+    {
+        var lm = new LogMgr(fm, "simpledb.log");
+        var bm = new BufferMgr(fm, lm, 8);
+        var tx1 = NewUndoRedoTx(fm, lm, bm);
+        blk = tx1.Append(file);
+        tx1.Pin(blk);
+        tx1.SetInt(blk, 0, 10, true);
+        tx1.Commit();
+
+        var tx2 = NewUndoRedoTx(fm, lm, bm);
+        tx2.Pin(blk);
+        tx2.SetInt(blk, 0, 999, true);
+        // no commit, no rollback — tx2 is in-flight
+        // flush so the dirty write is on disk (simulates crash with dirty data written)
+        bm.FlushAll();
+    }
+
+    // simulate restart
+    ConcurrencyMgr.ResetLockTable();
+    {
+        var lm = new LogMgr(fm, "simpledb.log");
+        var bm = new BufferMgr(fm, lm, 8);
+
+        var txR = NewUndoRedoTx(fm, lm, bm);
+        txR.Recover();
+
+        var txRead = NewUndoRedoTx(fm, lm, bm);
+        txRead.Pin(blk);
+        Assert.Equal(10, txRead.GetInt(blk, 0));
+        txRead.Commit();
+    }
+}
+
+static void UndoRedo_RollbackUndoes()
+{
+    var dbPath = CreateDirectory();
+    var fm = new FileMgr(new DirectoryInfo(dbPath), 400);
+    var lm = new LogMgr(fm, "simpledb.log");
+    var bm = new BufferMgr(fm, lm, 8);
+    string file = TxTestFile();
+
+    var tx1 = NewUndoRedoTx(fm, lm, bm);
+    BlockId blk = tx1.Append(file);
+    tx1.Pin(blk);
+    tx1.SetInt(blk, 0, 10, true);
+    tx1.SetString(blk, 80, "original", true);
+    tx1.Commit();
+
+    // tx2: overwrite and rollback
+    var tx2 = NewUndoRedoTx(fm, lm, bm);
+    tx2.Pin(blk);
+    tx2.SetInt(blk, 0, 999, true);
+    tx2.SetString(blk, 80, "changed", true);
+    tx2.Rollback();
+
+    var txRead = NewUndoRedoTx(fm, lm, bm);
+    txRead.Pin(blk);
+    Assert.Equal(10, txRead.GetInt(blk, 0));
+    Assert.Equal("original", txRead.GetString(blk, 80));
+    txRead.Commit();
+}
+
+static void UndoRedo_RecoverAfterCommitAndRollback()
+{
+    var dbPath = CreateDirectory();
+    var fm = new FileMgr(new DirectoryInfo(dbPath), 400);
+    string file = TxTestFile();
+    BlockId blk;
+
+    {
+        var lm = new LogMgr(fm, "simpledb.log");
+        var bm = new BufferMgr(fm, lm, 8);
+
+        // tx1: write initial values and commit
+        var tx1 = NewUndoRedoTx(fm, lm, bm);
+        blk = tx1.Append(file);
+        tx1.Pin(blk);
+        tx1.SetInt(blk, 0, 10, true);
+        tx1.SetInt(blk, 40, 20, true);
+        tx1.Commit();
+
+        // tx2: overwrite offset 0 and commit
+        var tx2 = NewUndoRedoTx(fm, lm, bm);
+        tx2.Pin(blk);
+        tx2.SetInt(blk, 0, 50, true);
+        tx2.Commit();
+
+        // tx3: overwrite offset 40 and rollback
+        var tx3 = NewUndoRedoTx(fm, lm, bm);
+        tx3.Pin(blk);
+        tx3.SetInt(blk, 40, 999, true);
+        tx3.Rollback();
+    }
+
+    // simulate restart
+    ConcurrencyMgr.ResetLockTable();
+    {
+        var lm = new LogMgr(fm, "simpledb.log");
+        var bm = new BufferMgr(fm, lm, 8);
+
+        var txR = NewUndoRedoTx(fm, lm, bm);
+        txR.Recover();
+
+        var txRead = NewUndoRedoTx(fm, lm, bm);
+        txRead.Pin(blk);
+        Assert.Equal(50, txRead.GetInt(blk, 0));   // tx2 committed
+        Assert.Equal(20, txRead.GetInt(blk, 40));   // tx3 rolled back
+        txRead.Commit();
+    }
+}
+
+static void UndoRedo_RecoverIdempotent()
+{
+    var dbPath = CreateDirectory();
+    var fm = new FileMgr(new DirectoryInfo(dbPath), 400);
+    string file = TxTestFile();
+    BlockId blk;
+
+    {
+        var lm = new LogMgr(fm, "simpledb.log");
+        var bm = new BufferMgr(fm, lm, 8);
+        var tx1 = NewUndoRedoTx(fm, lm, bm);
+        blk = tx1.Append(file);
+        tx1.Pin(blk);
+        tx1.SetInt(blk, 0, 77, true);
+        tx1.SetString(blk, 80, "stable", true);
+        tx1.Commit();
+    }
+
+    // run recovery twice from fresh restarts — result should be the same
+    ConcurrencyMgr.ResetLockTable();
+    {
+        var lm = new LogMgr(fm, "simpledb.log");
+        var bm = new BufferMgr(fm, lm, 8);
+        var txR1 = NewUndoRedoTx(fm, lm, bm);
+        txR1.Recover();
+    }
+
+    ConcurrencyMgr.ResetLockTable();
+    {
+        var lm = new LogMgr(fm, "simpledb.log");
+        var bm = new BufferMgr(fm, lm, 8);
+        var txR2 = NewUndoRedoTx(fm, lm, bm);
+        txR2.Recover();
+
+        var txRead = NewUndoRedoTx(fm, lm, bm);
+        txRead.Pin(blk);
+        Assert.Equal(77, txRead.GetInt(blk, 0));
+        Assert.Equal("stable", txRead.GetString(blk, 80));
+        txRead.Commit();
+    }
+}
+
+static void UndoRedo_RecoverStopsAtCheckpoint()
+{
+    var dbPath = CreateDirectory();
+    var fm = new FileMgr(new DirectoryInfo(dbPath), 400);
+    string file = TxTestFile();
+    BlockId blk;
+
+    {
+        var lm = new LogMgr(fm, "simpledb.log");
+        var bm = new BufferMgr(fm, lm, 8);
+
+        // tx1: write and commit
+        var tx1 = NewUndoRedoTx(fm, lm, bm);
+        blk = tx1.Append(file);
+        tx1.Pin(blk);
+        tx1.SetInt(blk, 0, 100, true);
+        tx1.Commit();
+
+        // first recovery — writes a CHECKPOINT
+        var txR1 = NewUndoRedoTx(fm, lm, bm);
+        txR1.Recover();
+
+        // tx2: write new value after checkpoint and commit
+        var tx2 = NewUndoRedoTx(fm, lm, bm);
+        tx2.Pin(blk);
+        tx2.SetInt(blk, 0, 200, true);
+        tx2.Commit();
+
+        // tx3: overwrite and rollback
+        var tx3 = NewUndoRedoTx(fm, lm, bm);
+        tx3.Pin(blk);
+        tx3.SetInt(blk, 0, 999, true);
+        tx3.Rollback();
+    }
+
+    // simulate restart
+    ConcurrencyMgr.ResetLockTable();
+    {
+        var lm = new LogMgr(fm, "simpledb.log");
+        var bm = new BufferMgr(fm, lm, 8);
+
+        // second recovery — should only scan back to CHECKPOINT
+        var txR2 = NewUndoRedoTx(fm, lm, bm);
+        txR2.Recover();
+
+        var txRead = NewUndoRedoTx(fm, lm, bm);
+        txRead.Pin(blk);
+        Assert.Equal(200, txRead.GetInt(blk, 0));
+        txRead.Commit();
+    }
+}
+
+static void UndoRedo_RecoverAppend()
+{
+    var dbPath = CreateDirectory();
+    var fm = new FileMgr(new DirectoryInfo(dbPath), 400);
+    string file = TxTestFile();
+
+    {
+        var lm = new LogMgr(fm, "simpledb.log");
+        var bm = new BufferMgr(fm, lm, 8);
+
+        // tx1: append and commit
+        var tx1 = NewUndoRedoTx(fm, lm, bm);
+        tx1.Append(file);
+        tx1.Commit();
+
+        // tx2: append and rollback
+        var tx2 = NewUndoRedoTx(fm, lm, bm);
+        tx2.Append(file);
+        tx2.Rollback();
+    }
+
+    // simulate restart
+    ConcurrencyMgr.ResetLockTable();
+    {
+        var lm = new LogMgr(fm, "simpledb.log");
+        var bm = new BufferMgr(fm, lm, 8);
+
+        var txR = NewUndoRedoTx(fm, lm, bm);
+        txR.Recover();
+
+        var txRead = NewUndoRedoTx(fm, lm, bm);
+        Assert.Equal(1, txRead.Size(file));
+        txRead.Commit();
+    }
+}
+
 static string CreateDirectory()
 {
     var path = UniqueDirectoryPath();
@@ -1633,6 +1949,241 @@ static string CreateDirectory()
 static string UniqueDirectoryPath()
 {
     return Path.Combine(Path.GetTempPath(), $"dbsharp-tests-{Guid.NewGuid():N}");
+}
+
+// ── Wait-Die tests ──────────────────────────────────────────────────────────
+
+// Younger tx (higher txnum) tries to write a block XLocked by an older tx → dies immediately.
+static void WaitDie_YoungerWriterDies()
+{
+    var (fm, lm, bm) = CreateTxTestDeps();
+    string file = TxTestFile();
+
+    var setup = new Transaction(fm, lm, bm);
+    BlockId blk = setup.Append(file);
+    setup.Pin(blk);
+    setup.SetInt(blk, 0, 1, true);
+    setup.Commit();
+
+    // older tx takes XLock
+    var older = new Transaction(fm, lm, bm); // lower txnum
+    older.Pin(blk);
+    older.SetInt(blk, 0, 2, true);
+
+    // younger tx tries to write the same block → should die immediately
+    bool youngerDied = false;
+    var thread = new Thread(() =>
+    {
+        var younger = new Transaction(fm, lm, bm); // higher txnum
+        try
+        {
+            younger.Pin(blk);
+            younger.SetInt(blk, 0, 3, true);
+            younger.Commit();
+        }
+        catch (LockAbortException)
+        {
+            younger.Rollback();
+            youngerDied = true;
+        }
+    });
+    thread.Start();
+    // younger should die almost instantly — no need for long wait
+    thread.Join(TimeSpan.FromSeconds(3));
+
+    Assert.True(youngerDied, "Younger tx should die immediately when older holds XLock.");
+
+    older.Commit();
+}
+
+// Older tx (lower txnum) tries to read a block XLocked by a younger tx → waits, then proceeds after younger commits.
+static void WaitDie_OlderReaderWaitsForYoungerXLock()
+{
+    var (fm, lm, bm) = CreateTxTestDeps();
+    string file = TxTestFile();
+
+    // setup: create block with initial value
+    var setup = new Transaction(fm, lm, bm);
+    BlockId blk = setup.Append(file);
+    setup.Pin(blk);
+    setup.SetInt(blk, 0, 10, true);
+    setup.Commit();
+
+    // older tx is created first (lower txnum)
+    var older = new Transaction(fm, lm, bm);
+    older.Pin(blk);
+
+    // younger tx takes XLock
+    var younger = new Transaction(fm, lm, bm);
+    younger.Pin(blk);
+    younger.SetInt(blk, 0, 20, true);
+
+    // older tx tries to read — should wait (not die)
+    var olderStarted = new ManualResetEventSlim(false);
+    bool olderDone = false;
+    int olderRead = -1;
+    var thread = new Thread(() =>
+    {
+        olderStarted.Set();
+        olderRead = older.GetInt(blk, 0);
+        older.Commit();
+        olderDone = true;
+    });
+    thread.Start();
+
+    olderStarted.Wait();
+    Thread.Sleep(300);
+    Assert.False(olderDone, "Older tx should be waiting, not completed.");
+
+    // younger commits → older should proceed
+    younger.Commit();
+    thread.Join(TimeSpan.FromSeconds(5));
+
+    Assert.True(olderDone, "Older tx should proceed after younger commits.");
+    Assert.Equal(20, olderRead);
+}
+
+// Younger tx tries to read a block XLocked by an older tx → dies immediately.
+static void WaitDie_YoungerReaderDiesWhenOlderHoldsXLock()
+{
+    var (fm, lm, bm) = CreateTxTestDeps();
+    string file = TxTestFile();
+
+    var setup = new Transaction(fm, lm, bm);
+    BlockId blk = setup.Append(file);
+    setup.Pin(blk);
+    setup.SetInt(blk, 0, 1, true);
+    setup.Commit();
+
+    // older tx takes XLock
+    var older = new Transaction(fm, lm, bm);
+    older.Pin(blk);
+    older.SetInt(blk, 0, 2, true);
+
+    // younger tx tries to read → should die
+    bool youngerDied = false;
+    var thread = new Thread(() =>
+    {
+        var younger = new Transaction(fm, lm, bm);
+        try
+        {
+            younger.Pin(blk);
+            younger.GetInt(blk, 0);
+            younger.Commit();
+        }
+        catch (LockAbortException)
+        {
+            younger.Rollback();
+            youngerDied = true;
+        }
+    });
+    thread.Start();
+    thread.Join(TimeSpan.FromSeconds(3));
+
+    Assert.True(youngerDied, "Younger tx should die when trying to read a block XLocked by older tx.");
+
+    older.Commit();
+}
+
+// Older tx (lower txnum) tries to write a block SLocked by younger txs → waits, then proceeds after they commit.
+static void WaitDie_OlderWriterWaitsForYoungerSLocks()
+{
+    var (fm, lm, bm) = CreateTxTestDeps();
+    string file = TxTestFile();
+
+    var setup = new Transaction(fm, lm, bm);
+    BlockId blk = setup.Append(file);
+    setup.Pin(blk);
+    setup.SetInt(blk, 0, 10, true);
+    setup.Commit();
+
+    // older tx is created first
+    var older = new Transaction(fm, lm, bm);
+    older.Pin(blk);
+
+    // two younger txs take SLocks
+    var younger1 = new Transaction(fm, lm, bm);
+    younger1.Pin(blk);
+    Assert.Equal(10, younger1.GetInt(blk, 0));
+
+    var younger2 = new Transaction(fm, lm, bm);
+    younger2.Pin(blk);
+    Assert.Equal(10, younger2.GetInt(blk, 0));
+
+    // older tx tries to write → should wait (it's older than all SLock holders)
+    var olderStarted = new ManualResetEventSlim(false);
+    bool olderDone = false;
+    var thread = new Thread(() =>
+    {
+        olderStarted.Set();
+        older.SetInt(blk, 0, 99, true);
+        older.Commit();
+        olderDone = true;
+    });
+    thread.Start();
+
+    olderStarted.Wait();
+    Thread.Sleep(300);
+    Assert.False(olderDone, "Older tx should wait while younger txs hold SLocks.");
+
+    // release one younger → still blocked
+    younger1.Commit();
+    Thread.Sleep(300);
+    Assert.False(olderDone, "Older tx should still wait with one younger SLock remaining.");
+
+    // release second younger → older proceeds
+    younger2.Commit();
+    thread.Join(TimeSpan.FromSeconds(5));
+
+    Assert.True(olderDone, "Older tx should proceed after all younger SLocks released.");
+
+    // verify written value
+    var reader = new Transaction(fm, lm, bm);
+    reader.Pin(blk);
+    Assert.Equal(99, reader.GetInt(blk, 0));
+    reader.Commit();
+}
+
+// Younger tx tries to write a block SLocked by an older tx → dies immediately.
+static void WaitDie_YoungerWriterDiesWhenOlderHoldsSLock()
+{
+    var (fm, lm, bm) = CreateTxTestDeps();
+    string file = TxTestFile();
+
+    var setup = new Transaction(fm, lm, bm);
+    BlockId blk = setup.Append(file);
+    setup.Pin(blk);
+    setup.SetInt(blk, 0, 1, true);
+    setup.Commit();
+
+    // older tx takes SLock by reading
+    var older = new Transaction(fm, lm, bm);
+    older.Pin(blk);
+    Assert.Equal(1, older.GetInt(blk, 0));
+
+    // younger tx tries to write → should die (younger than SLock holder)
+    bool youngerDied = false;
+    var thread = new Thread(() =>
+    {
+        var younger = new Transaction(fm, lm, bm);
+        try
+        {
+            younger.Pin(blk);
+            younger.SetInt(blk, 0, 2, true);
+            younger.Commit();
+        }
+        catch (LockAbortException)
+        {
+            younger.Rollback();
+            youngerDied = true;
+        }
+    });
+    thread.Start();
+    thread.Join(TimeSpan.FromSeconds(3));
+
+    Assert.True(youngerDied, "Younger tx should die when trying to write a block SLocked by older tx.");
+
+    older.Commit();
 }
 
 static class Assert
