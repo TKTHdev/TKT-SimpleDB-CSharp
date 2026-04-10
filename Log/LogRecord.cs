@@ -276,7 +276,8 @@ public class RollbackRecord : LogRecord
 public class SetStringRecord : LogRecord
 {
     private int _txnum, _offset;
-    private string _val;
+    private string _oldval;
+    private string _newval;
     private BlockId _blk;
 
     /// <summary>
@@ -301,7 +302,10 @@ public class SetStringRecord : LogRecord
         _offset = p.GetInt(opos);
 
         int vpos = opos + sizeof(int);
-        _val = p.GetString(vpos);
+        _oldval = p.GetString(vpos);
+
+        int nvpos = vpos + Page.MaxLength(_oldval.Length);
+        _newval = p.GetString(nvpos);
     }
 
     /// <inheritdoc/>
@@ -319,7 +323,7 @@ public class SetStringRecord : LogRecord
     /// <inheritdoc/>
     public override string ToString()
     {
-        return "<SETSTRING " + _txnum + " " + _blk + " " + _offset + " " + _val + ">";
+        return "<SETSTRING " + _txnum + " " + _blk + " " + _offset + " " + _oldval + " " + _newval + ">";
     }
 
     /// <summary>
@@ -330,7 +334,7 @@ public class SetStringRecord : LogRecord
     public void Undo(Transaction tx)
     {
         tx.Pin(_blk);
-        tx.SetString(_blk, _offset, _val, false); // don't log the undo!
+        tx.SetString(_blk, _offset, _oldval, false); // don't log the undo!
         tx.Unpin(_blk);
     }
 
@@ -341,16 +345,18 @@ public class SetStringRecord : LogRecord
     /// <param name="txnum">The transaction number.</param>
     /// <param name="blk">The block being modified.</param>
     /// <param name="offset">The byte offset within the block.</param>
-    /// <param name="val">The old string value to store.</param>
+    /// <param name="oldval">The old string value to store for undo.</param>
+    /// <param name="newval">The new string value to store for redo.</param>
     /// <returns>The LSN of the new log record.</returns>
-    public static int WriteToLog(LogMgr lm, int txnum, BlockId blk, int offset, string val)
+    public static int WriteToLog(LogMgr lm, int txnum, BlockId blk, int offset, string oldval, string newval)
     {
         int tpos = sizeof(int);
         int fpos = tpos + sizeof(int);
         int bpos = fpos + Page.MaxLength(blk.FileName().Length);
         int opos = bpos + sizeof(int);
-        int vpos = opos + sizeof(int);
-        int reclen = vpos + Page.MaxLength(val.Length);
+        int ovpos = opos + sizeof(int);
+        int nvpos = ovpos + Page.MaxLength(oldval.Length);
+        int reclen = nvpos + Page.MaxLength(newval.Length);
         byte[] rec = new byte[reclen];
         Page p = new Page(rec);
         p.SetInt(0, LogRecord.SETSTRING);
@@ -358,7 +364,8 @@ public class SetStringRecord : LogRecord
         p.SetString(fpos, blk.FileName());
         p.SetInt(bpos, blk.Number());
         p.SetInt(opos, offset);
-        p.SetString(vpos, val);
+        p.SetString(ovpos, oldval);
+        p.SetString(nvpos, newval);
         return lm.Append(rec);
     }
 }
@@ -370,7 +377,8 @@ public class SetStringRecord : LogRecord
 public class SetIntRecord : LogRecord
 {
     private int _txnum, _offset;
-    private int _val;
+    private int _oldval;
+    private int _newval;
     private BlockId _blk;
 
     /// <summary>
@@ -392,8 +400,11 @@ public class SetIntRecord : LogRecord
         int opos = bpos + sizeof(int);
         _offset = p.GetInt(opos);
 
-        int vpos = opos + sizeof(int);
-        _val = p.GetInt(vpos);
+        int ovpos = opos + sizeof(int);
+        _oldval = p.GetInt(ovpos);
+
+        int nvpos = ovpos + sizeof(int);
+        _newval = p.GetInt(nvpos);
     }
 
     /// <inheritdoc/>
@@ -411,7 +422,7 @@ public class SetIntRecord : LogRecord
     /// <inheritdoc/>
     public override string ToString()
     {
-        return "<SETINT " + _txnum + " " + _blk + " " + _offset + " " + _val + ">";
+        return "<SETINT " + _txnum + " " + _blk + " " + _offset + " " + _oldval + " " + _newval + ">";
     }
 
     /// <summary>
@@ -422,7 +433,7 @@ public class SetIntRecord : LogRecord
     public void Undo(Transaction tx)
     {
         tx.Pin(_blk);
-        tx.SetInt(_blk, _offset, _val, false);
+        tx.SetInt(_blk, _offset, _oldval, false);
         tx.Unpin(_blk);
     }
 
@@ -433,16 +444,18 @@ public class SetIntRecord : LogRecord
     /// <param name="txnum">The transaction number.</param>
     /// <param name="blk">The block being modified.</param>
     /// <param name="offset">The byte offset within the block.</param>
-    /// <param name="val">The old integer value to store.</param>
+    /// <param name="oldval">The old integer value to store for undo.</param>
+    /// <param name="newval">The new integer value to store for redo.</param>
     /// <returns>The LSN of the new log record.</returns>
-    public static int WriteToLog(LogMgr lm, int txnum, BlockId blk, int offset, int val)
+    public static int WriteToLog(LogMgr lm, int txnum, BlockId blk, int offset, int oldval, int newval)
     {
         int tpos = sizeof(int);
         int fpos = tpos + sizeof(int);
         int bpos = fpos + Page.MaxLength(blk.FileName().Length);
         int opos = bpos + sizeof(int);
-        int vpos = opos + sizeof(int);
-        int reclen = vpos + sizeof(int);
+        int ovpos = opos + sizeof(int);
+        int nvpos = ovpos + sizeof(int);
+        int reclen = nvpos + sizeof(int);
         byte[] rec = new byte[reclen];
         Page p = new Page(rec);
         p.SetInt(0, LogRecord.SETINT);
@@ -450,7 +463,8 @@ public class SetIntRecord : LogRecord
         p.SetString(fpos, blk.FileName());
         p.SetInt(bpos, blk.Number());
         p.SetInt(opos, offset);
-        p.SetInt(vpos, val);
+        p.SetInt(ovpos, oldval);
+        p.SetInt(nvpos, newval);
         return lm.Append(rec);
     }
 }

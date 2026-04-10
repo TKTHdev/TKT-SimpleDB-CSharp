@@ -77,7 +77,7 @@ public class UndoOnlyRecoveryMgr : IRecoveryMgr
     {
         int oldval = buff.Contents().GetInt(offset);
         BlockId blk = buff.Block();
-        return SetIntRecord.WriteToLog(_lm, _txnum, blk, offset, oldval);
+        return SetIntRecord.WriteToLog(_lm, _txnum, blk, offset, oldval, newval);
     }
 
     /// <summary>
@@ -91,7 +91,7 @@ public class UndoOnlyRecoveryMgr : IRecoveryMgr
     {
         string oldval = buff.Contents().GetString(offset);
         BlockId blk = buff.Block();
-        return SetStringRecord.WriteToLog(_lm, _txnum, blk, offset, oldval);
+        return SetStringRecord.WriteToLog(_lm, _txnum, blk, offset, oldval, newval);
     }
 
     /// <summary>
