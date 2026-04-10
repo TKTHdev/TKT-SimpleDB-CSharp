@@ -69,6 +69,18 @@ var tests = new (string Name, Action Body)[]
     ("Recovery stops scanning at CHECKPOINT record", Recovery_StopsAtCheckpoint),
     ("Transaction Rollback undoes append", Transaction_RollbackUndoesAppend),
     ("Recovery preserves append state after commit and rollback", Recovery_AppendAfterCommitAndRollback),
+    ("UndoRedo commit does not force buffers but redo recovers data", UndoRedo_CommitAndRecover),
+    ("UndoRedo recovery undoes uncommitted transaction", UndoRedo_RecoverUndoesUncommitted),
+    ("UndoRedo rollback undoes changes", UndoRedo_RollbackUndoes),
+    ("UndoRedo recovery after commit and rollback", UndoRedo_RecoverAfterCommitAndRollback),
+    ("UndoRedo recovery is idempotent", UndoRedo_RecoverIdempotent),
+    ("UndoRedo recovery stops at CHECKPOINT", UndoRedo_RecoverStopsAtCheckpoint),
+    ("UndoRedo recovery handles append commit and rollback", UndoRedo_RecoverAppend),
+    ("WaitDie younger writer dies when older holds XLock", WaitDie_YoungerWriterDies),
+    ("WaitDie older reader waits for younger XLock holder then proceeds", WaitDie_OlderReaderWaitsForYoungerXLock),
+    ("WaitDie younger reader dies when older holds XLock", WaitDie_YoungerReaderDiesWhenOlderHoldsXLock),
+    ("WaitDie older writer waits for younger SLock holders then proceeds", WaitDie_OlderWriterWaitsForYoungerSLocks),
+    ("WaitDie younger writer dies when older holds SLock", WaitDie_YoungerWriterDiesWhenOlderHoldsSLock),
 };
 
 var failures = new List<string>();
