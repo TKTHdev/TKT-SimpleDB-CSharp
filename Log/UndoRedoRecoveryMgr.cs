@@ -30,7 +30,8 @@ public class UndoRedoRecoveryMgr : IRecoveryMgr
     public void Rollback()
     {
         DoRollback();
-        _bm.FlushAll(_txnum);
+        // no need to flush all the buffers
+        // since it will be redoed anyways
         int lsn = RollbackRecord.WriteToLog(_lm, _txnum);
         _lm.Flush(lsn);
     }
@@ -75,6 +76,11 @@ public class UndoRedoRecoveryMgr : IRecoveryMgr
             }
         }
     }
-    
+
+    private void DoRecover()
+    {
+        
+    }
+
 
 }
