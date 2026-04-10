@@ -1,6 +1,7 @@
 ﻿using DBSharp.Buffers;
 using Buffer = DBSharp.Buffers.Buffer;
 using DBSharp.Transactions;
+using DBSharp.File;
 namespace DBSharp.Log;
 
 public class UndoRedoRecoveryMgr : IRecoveryMgr
@@ -38,16 +39,39 @@ public class UndoRedoRecoveryMgr : IRecoveryMgr
 
     public int SetInt(Buffer buff, int offset, int newval)
     {
-        throw new NotImplementedException();
+        int oldval = buff.Contents().GetInt(offset);
+        BlockId blk = buff.Block();
+        return SetIntRecord.WriteToLog(_lm, _txnum, blk, offset, oldval, newval);
     }
 
     public int SetString(Buffer buff, int offset, string newval)
     {
-        throw new NotImplementedException();
+        string oldval = buff.Contents().GetString(offset);
+        BlockId blk = buff.Block();
+        return SetStringRecord.WriteToLog(_lm, _txnum, blk, offset, oldval, newval);   
     }
 
     public int Append(string filename)
     {
-        throw new NotImplementedException();
+        return AppendRecord.WriteToLog(_lm, _txnum, filename);
     }
+
+    private void DoRollback()
+    {
+        // iterate in reverse order
+        foreach (byte[] bytes in _lm.GetEnumerator())
+        {
+            LogRecord rec = LogRecord.CreateLogRecord(bytes);
+            // if the record is by the corresponding transaction
+            if (rec.TxNumber() == _txnum)
+            {
+                // undo until it reaches START record
+                if (rec.Op() == LogRecord.START)
+                    return;
+                rec.Undo(_tx);
+            }
+        }
+    }
+    
+
 }
