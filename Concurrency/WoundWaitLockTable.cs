@@ -35,11 +35,7 @@ public class WoundWaitLockTable : ILockTable
                 ThrowIfWounded(txNum);
                 int holder = _xLockHolder[blk];
                 if (txNum < holder) // requester is older → wound the younger holder
-                {
-                    WoundTx(holder);
-                    continue; // re-check — lock is now released
-                }
-                // requester is younger → wait
+                    _woundedTxns.Add(holder);
                 Monitor.Wait(this);
             }
             ThrowIfWounded(txNum);
@@ -62,16 +58,12 @@ public class WoundWaitLockTable : ILockTable
             while (HasOtherSLocks(blk, txNum))
             {
                 ThrowIfWounded(txNum);
-                bool mustWait = false;
-                foreach (int holder in _sLockHolders[blk].Where(h => h != txNum).ToList())
+                foreach (int holder in _sLockHolders[blk].Where(h => h != txNum))
                 {
                     if (txNum < holder) // requester is older → wound
-                        WoundTx(holder);
-                    else
-                        mustWait = true;
+                        _woundedTxns.Add(holder);
                 }
-                if (mustWait)
-                    Monitor.Wait(this);
+                Monitor.Wait(this);
             }
             ThrowIfWounded(txNum);
             _xLockHolder[blk] = txNum;
@@ -87,48 +79,24 @@ public class WoundWaitLockTable : ILockTable
     {
         lock (this)
         {
-            RemoveLocks(blk, txNum);
-            bool wasWounded = _woundedTxns.Remove(txNum);
-            Monitor.PulseAll(this);
-            if (wasWounded)
+            if (_woundedTxns.Remove(txNum))
                 throw new LockAbortException();
+            if (_xLockHolder.TryGetValue(blk, out int holder) && holder == txNum)
+                _xLockHolder.Remove(blk);
+            if (_sLockHolders.TryGetValue(blk, out var holders))
+            {
+                holders.Remove(txNum);
+                if (holders.Count == 0)
+                    _sLockHolders.Remove(blk);
+            }
+            Monitor.PulseAll(this);
         }
-    }
-
-    /// <summary>
-    /// Wounds the specified transaction: forcibly removes all its locks across all blocks
-    /// and marks it so that its next lock-table operation throws <see cref="LockAbortException"/>.
-    /// </summary>
-    private void WoundTx(int txNum)
-    {
-        _woundedTxns.Add(txNum);
-        foreach (var blk in _xLockHolder.Where(kv => kv.Value == txNum).Select(kv => kv.Key).ToList())
-            _xLockHolder.Remove(blk);
-        foreach (var kv in _sLockHolders.ToList())
-        {
-            kv.Value.Remove(txNum);
-            if (kv.Value.Count == 0)
-                _sLockHolders.Remove(kv.Key);
-        }
-        Monitor.PulseAll(this);
     }
 
     private void ThrowIfWounded(int txNum)
     {
         if (_woundedTxns.Remove(txNum))
             throw new LockAbortException();
-    }
-
-    private void RemoveLocks(BlockId blk, int txNum)
-    {
-        if (_xLockHolder.TryGetValue(blk, out int holder) && holder == txNum)
-            _xLockHolder.Remove(blk);
-        if (_sLockHolders.TryGetValue(blk, out var holders))
-        {
-            holders.Remove(txNum);
-            if (holders.Count == 0)
-                _sLockHolders.Remove(blk);
-        }
     }
 
     private bool HasXLockByOther(BlockId blk, int txNum)
