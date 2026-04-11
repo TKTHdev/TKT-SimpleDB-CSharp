@@ -646,11 +646,7 @@ public class AppendRecord : LogRecord
     /// <summary>
     /// Redoes the append by appending a new block to the file.
     /// </summary>
-    /// <param name="tx">The transaction used to perform the redo.</param>
-    public void Redo(Transaction tx)
-    {
-        tx.Append(_filename);
-    }
+    public void Redo(Transaction tx) { }
 
     /// <summary>
     /// Writes an APPEND record to the log.
