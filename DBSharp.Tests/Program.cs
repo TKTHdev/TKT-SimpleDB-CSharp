@@ -81,6 +81,12 @@ var tests = new (string Name, Action Body)[]
     ("WaitDie younger reader dies when older holds XLock", WaitDie_YoungerReaderDiesWhenOlderHoldsXLock),
     ("WaitDie older writer waits for younger SLock holders then proceeds", WaitDie_OlderWriterWaitsForYoungerSLocks),
     ("WaitDie younger writer dies when older holds SLock", WaitDie_YoungerWriterDiesWhenOlderHoldsSLock),
+    ("WoundWait older writer wounds younger XLock holder then proceeds", WoundWait_OlderWriterWoundsYoungerXLock),
+    ("WoundWait younger writer waits for older XLock holder then proceeds", WoundWait_YoungerWriterWaitsForOlderXLock),
+    ("WoundWait older reader wounds younger XLock holder then proceeds", WoundWait_OlderReaderWoundsYoungerXLock),
+    ("WoundWait younger reader waits for older XLock holder then proceeds", WoundWait_YoungerReaderWaitsForOlderXLock),
+    ("WoundWait older writer wounds younger SLock holders then proceeds", WoundWait_OlderWriterWoundsYoungerSLocks),
+    ("WoundWait younger writer waits for older SLock holder then proceeds", WoundWait_YoungerWriterWaitsForOlderSLock),
 };
 
 var failures = new List<string>();
@@ -2184,6 +2190,335 @@ static void WaitDie_YoungerWriterDiesWhenOlderHoldsSLock()
     Assert.True(youngerDied, "Younger tx should die when trying to write a block SLocked by older tx.");
 
     older.Commit();
+}
+
+// ── Wound-Wait tests ──────────────────────────────────────────────────
+
+// Older tx tries to write a block XLocked by younger tx → wounds younger, younger aborts, older proceeds.
+static void WoundWait_OlderWriterWoundsYoungerXLock()
+{
+    ConcurrencyMgr.ResetLockTable(new WoundWaitLockTable());
+    var (fm, lm, bm) = CreateTxTestDeps();
+    string file = TxTestFile();
+
+    var setup = new Transaction(fm, lm, bm);
+    BlockId blk = setup.Append(file);
+    setup.Pin(blk);
+    setup.SetInt(blk, 0, 10, true);
+    setup.Commit();
+
+    // older tx is created first (lower txnum)
+    var older = new Transaction(fm, lm, bm);
+    older.Pin(blk);
+
+    // younger tx takes XLock
+    var younger = new Transaction(fm, lm, bm);
+    younger.Pin(blk);
+    younger.SetInt(blk, 0, 20, true);
+
+    // younger holds XLock and waits to simulate holding it
+    bool youngerWounded = false;
+    var youngerHolding = new ManualResetEventSlim(false);
+    var youngerThread = new Thread(() =>
+    {
+        youngerHolding.Set();
+        try
+        {
+            // younger is already holding XLock; just wait until wounded
+            Thread.Sleep(5000);
+            younger.Commit();
+        }
+        catch (LockAbortException)
+        {
+            younger.Rollback();
+            youngerWounded = true;
+        }
+    });
+    youngerThread.Start();
+    youngerHolding.Wait();
+
+    // older tries to write → wounds younger, waits for younger to release
+    older.SetInt(blk, 0, 99, true);
+    older.Commit();
+    youngerThread.Join(TimeSpan.FromSeconds(5));
+
+    Assert.True(youngerWounded, "Younger tx should be wounded when older tx requests XLock.");
+
+    // verify older's write persisted
+    var reader = new Transaction(fm, lm, bm);
+    reader.Pin(blk);
+    Assert.Equal(99, reader.GetInt(blk, 0));
+    reader.Commit();
+    ConcurrencyMgr.ResetLockTable();
+}
+
+// Younger tx tries to write a block XLocked by older tx → waits, then proceeds after older commits.
+static void WoundWait_YoungerWriterWaitsForOlderXLock()
+{
+    ConcurrencyMgr.ResetLockTable(new WoundWaitLockTable());
+    var (fm, lm, bm) = CreateTxTestDeps();
+    string file = TxTestFile();
+
+    var setup = new Transaction(fm, lm, bm);
+    BlockId blk = setup.Append(file);
+    setup.Pin(blk);
+    setup.SetInt(blk, 0, 10, true);
+    setup.Commit();
+
+    // older tx takes XLock
+    var older = new Transaction(fm, lm, bm);
+    older.Pin(blk);
+    older.SetInt(blk, 0, 20, true);
+
+    // younger tx tries to write → should wait (not die)
+    var youngerStarted = new ManualResetEventSlim(false);
+    bool youngerDone = false;
+    var thread = new Thread(() =>
+    {
+        var younger = new Transaction(fm, lm, bm);
+        younger.Pin(blk);
+        youngerStarted.Set();
+        younger.SetInt(blk, 0, 30, true);
+        younger.Commit();
+        youngerDone = true;
+    });
+    thread.Start();
+
+    youngerStarted.Wait();
+    Thread.Sleep(300);
+    Assert.False(youngerDone, "Younger tx should be waiting, not completed.");
+
+    // older commits → younger should proceed
+    older.Commit();
+    thread.Join(TimeSpan.FromSeconds(5));
+
+    Assert.True(youngerDone, "Younger tx should proceed after older commits.");
+    ConcurrencyMgr.ResetLockTable();
+}
+
+// Older tx tries to read a block XLocked by younger tx → wounds younger, younger aborts, older reads.
+static void WoundWait_OlderReaderWoundsYoungerXLock()
+{
+    ConcurrencyMgr.ResetLockTable(new WoundWaitLockTable());
+    var (fm, lm, bm) = CreateTxTestDeps();
+    string file = TxTestFile();
+
+    var setup = new Transaction(fm, lm, bm);
+    BlockId blk = setup.Append(file);
+    setup.Pin(blk);
+    setup.SetInt(blk, 0, 10, true);
+    setup.Commit();
+
+    // older tx is created first
+    var older = new Transaction(fm, lm, bm);
+    older.Pin(blk);
+
+    // younger tx takes XLock and writes
+    var younger = new Transaction(fm, lm, bm);
+    younger.Pin(blk);
+    younger.SetInt(blk, 0, 20, true);
+
+    bool youngerWounded = false;
+    var youngerHolding = new ManualResetEventSlim(false);
+    var youngerThread = new Thread(() =>
+    {
+        youngerHolding.Set();
+        try
+        {
+            Thread.Sleep(5000);
+            younger.Commit();
+        }
+        catch (LockAbortException)
+        {
+            younger.Rollback();
+            youngerWounded = true;
+        }
+    });
+    youngerThread.Start();
+    youngerHolding.Wait();
+
+    // older tries to read → wounds younger
+    int val = older.GetInt(blk, 0);
+    older.Commit();
+    youngerThread.Join(TimeSpan.FromSeconds(5));
+
+    Assert.True(youngerWounded, "Younger tx should be wounded when older tx requests SLock.");
+    // younger was rolled back, so we see the original value
+    Assert.Equal(10, val);
+    ConcurrencyMgr.ResetLockTable();
+}
+
+// Younger tx tries to read a block XLocked by older tx → waits, then proceeds after older commits.
+static void WoundWait_YoungerReaderWaitsForOlderXLock()
+{
+    ConcurrencyMgr.ResetLockTable(new WoundWaitLockTable());
+    var (fm, lm, bm) = CreateTxTestDeps();
+    string file = TxTestFile();
+
+    var setup = new Transaction(fm, lm, bm);
+    BlockId blk = setup.Append(file);
+    setup.Pin(blk);
+    setup.SetInt(blk, 0, 10, true);
+    setup.Commit();
+
+    // older tx takes XLock
+    var older = new Transaction(fm, lm, bm);
+    older.Pin(blk);
+    older.SetInt(blk, 0, 20, true);
+
+    // younger tx tries to read → should wait
+    var youngerStarted = new ManualResetEventSlim(false);
+    bool youngerDone = false;
+    int youngerRead = -1;
+    var thread = new Thread(() =>
+    {
+        var younger = new Transaction(fm, lm, bm);
+        younger.Pin(blk);
+        youngerStarted.Set();
+        youngerRead = younger.GetInt(blk, 0);
+        younger.Commit();
+        youngerDone = true;
+    });
+    thread.Start();
+
+    youngerStarted.Wait();
+    Thread.Sleep(300);
+    Assert.False(youngerDone, "Younger tx should be waiting, not completed.");
+
+    // older commits → younger should proceed
+    older.Commit();
+    thread.Join(TimeSpan.FromSeconds(5));
+
+    Assert.True(youngerDone, "Younger tx should proceed after older commits.");
+    Assert.Equal(20, youngerRead);
+    ConcurrencyMgr.ResetLockTable();
+}
+
+// Older tx tries to write a block SLocked by younger txs → wounds them, they abort, older proceeds.
+static void WoundWait_OlderWriterWoundsYoungerSLocks()
+{
+    ConcurrencyMgr.ResetLockTable(new WoundWaitLockTable());
+    var (fm, lm, bm) = CreateTxTestDeps();
+    string file = TxTestFile();
+
+    var setup = new Transaction(fm, lm, bm);
+    BlockId blk = setup.Append(file);
+    setup.Pin(blk);
+    setup.SetInt(blk, 0, 10, true);
+    setup.Commit();
+
+    // older tx is created first
+    var older = new Transaction(fm, lm, bm);
+    older.Pin(blk);
+
+    // two younger txs take SLocks
+    var younger1 = new Transaction(fm, lm, bm);
+    younger1.Pin(blk);
+    Assert.Equal(10, younger1.GetInt(blk, 0));
+
+    var younger2 = new Transaction(fm, lm, bm);
+    younger2.Pin(blk);
+    Assert.Equal(10, younger2.GetInt(blk, 0));
+
+    // younger txs hold SLocks in background threads to receive wound
+    int woundCount = 0;
+    var y1Holding = new ManualResetEventSlim(false);
+    var y2Holding = new ManualResetEventSlim(false);
+    var y1Thread = new Thread(() =>
+    {
+        y1Holding.Set();
+        try
+        {
+            Thread.Sleep(5000);
+            younger1.Commit();
+        }
+        catch (LockAbortException)
+        {
+            younger1.Rollback();
+            Interlocked.Increment(ref woundCount);
+        }
+    });
+    var y2Thread = new Thread(() =>
+    {
+        y2Holding.Set();
+        try
+        {
+            Thread.Sleep(5000);
+            younger2.Commit();
+        }
+        catch (LockAbortException)
+        {
+            younger2.Rollback();
+            Interlocked.Increment(ref woundCount);
+        }
+    });
+    y1Thread.Start();
+    y2Thread.Start();
+    y1Holding.Wait();
+    y2Holding.Wait();
+
+    // older tx tries to write → wounds both younger txs
+    older.SetInt(blk, 0, 99, true);
+    older.Commit();
+    y1Thread.Join(TimeSpan.FromSeconds(5));
+    y2Thread.Join(TimeSpan.FromSeconds(5));
+
+    Assert.Equal(2, woundCount);
+
+    var reader = new Transaction(fm, lm, bm);
+    reader.Pin(blk);
+    Assert.Equal(99, reader.GetInt(blk, 0));
+    reader.Commit();
+    ConcurrencyMgr.ResetLockTable();
+}
+
+// Younger tx tries to write a block SLocked by older tx → waits, then proceeds after older commits.
+static void WoundWait_YoungerWriterWaitsForOlderSLock()
+{
+    ConcurrencyMgr.ResetLockTable(new WoundWaitLockTable());
+    var (fm, lm, bm) = CreateTxTestDeps();
+    string file = TxTestFile();
+
+    var setup = new Transaction(fm, lm, bm);
+    BlockId blk = setup.Append(file);
+    setup.Pin(blk);
+    setup.SetInt(blk, 0, 10, true);
+    setup.Commit();
+
+    // older tx takes SLock by reading
+    var older = new Transaction(fm, lm, bm);
+    older.Pin(blk);
+    Assert.Equal(10, older.GetInt(blk, 0));
+
+    // younger tx tries to write → should wait (not wound, because younger)
+    var youngerStarted = new ManualResetEventSlim(false);
+    bool youngerDone = false;
+    var thread = new Thread(() =>
+    {
+        var younger = new Transaction(fm, lm, bm);
+        younger.Pin(blk);
+        youngerStarted.Set();
+        younger.SetInt(blk, 0, 99, true);
+        younger.Commit();
+        youngerDone = true;
+    });
+    thread.Start();
+
+    youngerStarted.Wait();
+    Thread.Sleep(300);
+    Assert.False(youngerDone, "Younger tx should be waiting, not completed.");
+
+    // older commits → younger should proceed
+    older.Commit();
+    thread.Join(TimeSpan.FromSeconds(5));
+
+    Assert.True(youngerDone, "Younger tx should proceed after older commits.");
+
+    var reader = new Transaction(fm, lm, bm);
+    reader.Pin(blk);
+    Assert.Equal(99, reader.GetInt(blk, 0));
+    reader.Commit();
+    ConcurrencyMgr.ResetLockTable();
 }
 
 static class Assert

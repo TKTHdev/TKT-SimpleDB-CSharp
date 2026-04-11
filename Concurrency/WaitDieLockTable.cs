@@ -12,7 +12,7 @@ namespace DBSharp.Concurrency;
 ///   - If the requester is younger than the holder, it dies (throws <see cref="LockAbortException"/>).
 /// This guarantees no deadlocks because younger transactions never wait for older ones.
 /// </summary>
-public class LockTable
+public class WaitDieLockTable : ILockTable
 {
     private Dictionary<BlockId, HashSet<int>> _sLockHolders = new();
     private Dictionary<BlockId, int> _xLockHolder = new();
