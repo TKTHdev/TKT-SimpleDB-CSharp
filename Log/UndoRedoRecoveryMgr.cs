@@ -24,13 +24,13 @@ public class UndoRedoRecoveryMgr : IRecoveryMgr
     /// <param name="txnum">The transaction number.</param>
     /// <param name="lm">The log manager for WAL operations.</param>
     /// <param name="bm">The buffer manager for buffer pool access.</param>
-    public  UndoRedoRecoveryMgr(Transaction tx, int txnum, LogMgr lm, IBufferMgr bm)
+    public UndoRedoRecoveryMgr(Transaction tx, int txnum, LogMgr lm, IBufferMgr bm)
     {
-       _tx = tx;
-       _txnum = txnum;
-       _lm = lm;
-       _bm = bm;
-       StartRecord.WriteToLog(lm, txnum);
+        _tx = tx;
+        _txnum = txnum;
+        _lm = lm;
+        _bm = bm;
+        StartRecord.WriteToLog(lm, txnum);
     }
 
     /// <summary>

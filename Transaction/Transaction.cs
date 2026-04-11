@@ -207,7 +207,7 @@ public class Transaction
         BlockId dummyBlk = new BlockId(filename, END_OF_FILE);
         _concurMgr.XLock(dummyBlk);
         int lsn = -1;
-        lsn =  _recoveryMgr.Append(filename);
+        lsn = _recoveryMgr.Append(filename);
         return _fm.Append(filename);
     }
 

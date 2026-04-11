@@ -1,5 +1,5 @@
 ﻿namespace DBSharp.Log;
-using  DBSharp.Buffers;
+using DBSharp.Buffers;
 
 public interface IRecoveryMgr
 {
