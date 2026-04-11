@@ -9,7 +9,7 @@ namespace DBSharp.Concurrency;
 /// </summary>
 public class ConcurrencyMgr
 {
-    private static LockTable _lockTable = new LockTable();
+    private static ILockTable _lockTable = new WaitDieLockTable();
     private Dictionary<BlockId, string> _locks = new Dictionary<BlockId, string>();
     private int _txNum;
 
@@ -24,7 +24,15 @@ public class ConcurrencyMgr
     /// </summary>
     public static void ResetLockTable()
     {
-        _lockTable = new LockTable();
+        _lockTable = new WaitDieLockTable();
+    }
+
+    /// <summary>
+    /// Resets the global lock table with the specified implementation.
+    /// </summary>
+    public static void ResetLockTable(ILockTable lockTable)
+    {
+        _lockTable = lockTable;
     }
 
     /// <summary>
