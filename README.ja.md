@@ -5,17 +5,18 @@ DBSharp は C#（.NET 8）で実装している、学習目的のデータベー
 
 - 固定長ブロック単位のファイル I/O
 - ページ内の基本型シリアライズ
-- 追記型ログと新しい順での走査
+- 追記型ログと順方向・逆方向の走査
 - 複数の置換ポリシーに対応したバッファプールの pin/unpin 管理
-- WAL ベースのリカバリ（undo-only）
-- 共有/排他ロックによる同時実行制御
+- WAL ベースのリカバリ（undo-only および undo-redo）
+- 共有/排他ロックとデッドロック防止（wait-die、wound-wait）による同時実行制御
+- 静止型・非静止型チェックポイント
 - コミット・ロールバック・クラッシュリカバリ対応のトランザクション
 
 まだフル機能の DBMS ではなく、ストレージからトランザクション管理までの基盤コンポーネントの段階です。
 
 ## 現在の実装状況
 
-ローカルテスト（52件）で確認済み:
+ローカルテスト（76件）で確認済み:
 
 - `File.BlockId`
   - ブロック識別子（ファイル名 + ブロック番号）、等価性、ハッシュ、文字列表現
@@ -23,21 +24,28 @@ DBSharp は C#（.NET 8）で実装している、学習目的のデータベー
   - `int` / `short` / `bool` / `DateTime` / `byte[]` / `string` の読み書き
   - 固定長バイト配列と境界チェック
 - `File.FileMgr`
-  - ブロック read/write/append
+  - ブロック read/write/append/truncate
   - ブロック数ベースのファイル長取得
   - 起動時の `temp` 接頭辞ファイル削除
-- `Log.LogMgr` + `Log.LogIterator`
+  - I/O 統計追跡（読み取り・書き込み・追記のブロック数）
+- `Log.LogMgr` + `Log.BackwardLogIterator` + `Log.ForwardLogIterator`
   - ログレコードのページ追記
   - LSN ベースの flush 制御
-  - 新しいレコードから古いレコードへの反復
+  - 新しいレコードから古いレコードへの反復（逆方向）、古いレコードから新しいレコードへの反復（順方向）
 - `Log.LogRecord`
-  - 型付きログレコード: Checkpoint, Start, Commit, Rollback, SetInt, SetString
+  - 型付きログレコード: Checkpoint, Start, Commit, Rollback, SetInt, SetString, NQCheckpoint, Append
   - ログバイト列から適切なレコード型へのファクトリメソッド
-- `Log.RecoveryMgr`
-  - WAL ベースの undo リカバリ
+  - レコード型ごとの undo / redo サポート
+- `Log.UndoOnlyRecoveryMgr`
+  - WAL ベースの undo-only リカバリ（force ポリシー — コミット時にダーティバッファをフラッシュ）
   - ロールバック（単一トランザクションの undo）とリカバー（未コミット全件の undo）
   - SetInt/SetString の旧値ログ
-- `Buffer.Buffer` + `Buffer.BufferMgr` + 置換ポリシーバリエーション
+  - 静止型・非静止型チェックポイント両対応
+- `Log.UndoRedoRecoveryMgr`
+  - WAL ベースの undo-redo リカバリ（no-force ポリシー — コミット時にバッファフラッシュしない）
+  - 2 パスリカバリ: undo パス（逆方向）→ redo パス（順方向）
+  - SetInt/SetString の旧値・新値ログ
+- `Buffer.Buffer` + `Buffer.AbstractBufferMgr` + 置換ポリシーバリエーション
   - pin/unpin ワークフロー
   - 利用可能バッファ数の管理
   - 置換ポリシー:
@@ -46,17 +54,26 @@ DBSharp は C#（.NET 8）で実装している、学習目的のデータベー
     - 最後に unpin されてから最も時間が経ったフレームを退避する LRU (`LRUBufferMgr`)
     - Clock（セカンドチャンス）スイープ (`ClockBufferMgr`)
     - クリーン優先・ダーティフォールバック (`CleanFirstBufferMgr`)
+    - LSN ベース: クリーン優先、ダーティでは最小 LSN を選択 (`LSNBasedBufferMgr`)
   - ハッシュテーブルベースのバッファ検索 (`BufferMgrWithBufferHashTable`)
   - 枯渇時タイムアウトと `BufferAbortException`
-- `Concurrency.ConcurrencyMgr` + `Concurrency.LockTable`
+- `Concurrency.ConcurrencyMgr` + `Concurrency.ILockTable`
   - 共有 (S) ロックと排他 (X) ロックのプロトコル
   - S ロックから X ロックへのロックエスカレーション
-  - タイムアウト付きデッドロック回避 + `LockAbortException`
+  - `ILockTable` によるプラガブルなデッドロック防止:
+    - wait-die プロトコル (`WaitDieLockTable`)
+    - wound-wait プロトコル (`WoundWaitLockTable`)
+  - コンフリクト時の `LockAbortException`
+- `Checkpoint.ICheckpointStrategy`
+  - 静止型チェックポイント: 新規トランザクションをブロックし、実行中のトランザクション完了を待機 (`QuiescentCheckpointStrategy`)
+  - 非静止型チェックポイント: ブロックせずにアクティブなトランザクションのスナップショットを取得 (`NonQuiescentCheckpointStrategy`)
 - `Transaction.Transaction` + `Transaction.BufferList`
   - int / string 値のトランザクショナルな読み書き
   - コミット、ロールバック、クラッシュリカバリ
   - トランザクション単位のバッファ pin 管理
-  - 同時実行制御下でのブロック append / size 操作
+  - 同時実行制御下でのブロック append / truncate / size 操作
+  - ファントム防止のための EOF センチネルロック
+  - リカバリ戦略の選択（undo-only または undo-redo）
 
 ## ディレクトリ構成
 
@@ -64,11 +81,25 @@ DBSharp は C#（.NET 8）で実装している、学習目的のデータベー
 DBSharp/
 ├── Buffer/
 │   ├── Buffer.cs
-│   ├── BufferMgr.cs
+│   ├── AbstractBufferMgr.cs      # 置換ポリシーのテンプレートメソッド基底クラス
+│   ├── BufferMgr.cs              # 素朴な置換
+│   ├── FIFOBufferMgr.cs
+│   ├── LRUBufferMgr.cs
+│   ├── ClockBufferMgr.cs
+│   ├── CleanFirstBufferMgr.cs
+│   ├── LSNBasedBufferMgr.cs
+│   ├── BufferMgrWithBufferHashTable.cs
+│   ├── IBufferMgr.cs
 │   └── BufferAbortException.cs
+├── Checkpoint/
+│   ├── ICheckpointStrategy.cs
+│   ├── QuiescentCheckpointStrategy.cs
+│   └── NonQuiescentCheckpointStrategy.cs
 ├── Concurrency/
 │   ├── ConcurrencyMgr.cs
-│   ├── LockTable.cs
+│   ├── ILockTable.cs
+│   ├── WaitDieLockTable.cs
+│   ├── WoundWaitLockTable.cs
 │   └── LockAbortException.cs
 ├── File/
 │   ├── BlockId.cs
@@ -76,9 +107,12 @@ DBSharp/
 │   └── Page.cs
 ├── Log/
 │   ├── LogMgr.cs
-│   ├── LogIterator.cs
+│   ├── BackwardLogIterator.cs
+│   ├── ForwardLogIterator.cs
 │   ├── LogRecord.cs
-│   └── RecoveryMgr.cs
+│   ├── IRecoveryMgr.cs
+│   ├── UndoOnlyRecoveryMgr.cs
+│   └── UndoRedoRecoveryMgr.cs
 ├── Transaction/
 │   ├── Transaction.cs
 │   └── BufferList.cs
