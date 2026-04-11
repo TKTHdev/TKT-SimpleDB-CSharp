@@ -644,7 +644,8 @@ public class AppendRecord : LogRecord
     }
 
     /// <summary>
-    /// Redoes the append by appending a new block to the file.
+    /// No-op; appends are written directly to disk by <see cref="FileMgr.Append"/>
+    /// and do not need to be replayed during recovery.
     /// </summary>
     public void Redo(Transaction tx) { }
 
