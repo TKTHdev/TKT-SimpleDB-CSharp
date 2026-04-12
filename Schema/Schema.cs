@@ -41,7 +41,7 @@ public class Schema
 
     public List<string> Fields()
     {
-        throw new NotImplementedException();
+        return fields;
     }
 
     public bool HasField(string fieldname)
