@@ -21,7 +21,7 @@ public class Schema
 
     public void AddIntField(string fieldname)
     {
-        throw new NotImplementedException();
+        AddField(fieldname,SqlType.INTEGER ,0 );
     }
 
     public void AddStringField(string fieldname, int length)
