@@ -26,7 +26,7 @@ public class Schema
 
     public void AddStringField(string fieldname, int length)
     {
-        throw new NotImplementedException();
+        AddField(fieldname, SqlType.VARCHAR, length);
     }
 
     public void Add(string fieldname, Schema sch)
