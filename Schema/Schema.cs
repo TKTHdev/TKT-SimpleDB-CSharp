@@ -46,7 +46,7 @@ public class Schema
 
     public bool HasField(string fieldname)
     {
-        throw new NotImplementedException();
+        return  Fields().Contains(fieldname);
     }
 
     public int Type(string fieldname)
