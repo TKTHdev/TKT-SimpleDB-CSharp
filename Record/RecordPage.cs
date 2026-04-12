@@ -35,7 +35,8 @@ public class RecordPage
     }
     public void SetString(int slot, string fieldname, string value)
     {
-        throw new NotImplementedException();
+        int fldpos   = OffSet(slot) + _layout.GetOffset(fieldname);
+        _tx.SetString(_blk, fldpos, value, true);
     }
 
     public void Delete(int slot)
