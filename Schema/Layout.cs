@@ -1,4 +1,5 @@
 ﻿using System.Xml.Schema;
+using DBSharp.File;
 
 namespace DBSharp.Schema;
 
@@ -48,6 +49,10 @@ public class Layout
 
     private int lengthInBytes(string fieldname)
     {
-        throw new NotImplementedException();
+        int fieldtype = schema.Type(fieldname);
+        if (fieldtype == Schema.SqlType.INTEGER)
+            return sizeof(int);
+        else // fieldtype == VARCHAR
+            return Page.MaxLength(schema.Length(fieldname));
     }
 }
