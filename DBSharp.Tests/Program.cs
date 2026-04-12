@@ -3,7 +3,7 @@ using DBSharp.File;
 using DBSharp.Concurrency;
 using DBSharp.Log;
 using DBSharp.Transactions;
-using DBSharp.Schema;
+using DBSharp.Record;
 using System.Text;
 
 var tests = new (string Name, Action Body)[]
@@ -89,6 +89,7 @@ var tests = new (string Name, Action Body)[]
     ("WoundWait older writer wounds younger SLock holders then proceeds", WoundWait_OlderWriterWoundsYoungerSLocks),
     ("WoundWait younger writer waits for older SLock holder then proceeds", WoundWait_YoungerWriterWaitsForOlderSLock),
     ("Schema AddAll adds fields from another schema", Schema_AddAll),
+    ("RecordPage format, insert, delete, and iterate", RecordPage_Test),
 };
 
 var failures = new List<string>();
@@ -2545,6 +2546,72 @@ static void Schema_AddAll()
     Assert.Equal(0, s2.Length("C"));
 }
 
+static void RecordPage_Test()
+{
+    var (fm, lm, bm) = CreateTxTestDeps();
+    string file = TxTestFile();
+    var tx = new Transaction(fm, lm, bm);
+
+    var sch = new Schema();
+    sch.AddIntField("A");
+    sch.AddStringField("B", 9);
+
+    var layout = new Layout(sch);
+    foreach (var fldname in layout.GetSchema().Fields())
+    {
+        int offset = layout.GetOffset(fldname);
+        Console.WriteLine($"{fldname} has offset {offset}");
+    }
+
+    var blk = tx.Append(file);
+    tx.Pin(blk);
+
+    var rp = new RecordPage(tx, blk, layout);
+    rp.Format();
+
+    Console.WriteLine("Filling the page with random records.");
+    int slot = rp.InsertAfter(-1);
+    var rand = new Random();
+    while (slot >= 0)
+    {
+        int n = (int) Math.Round(rand.NextDouble() * 50);
+        rp.SetInt(slot, "A", n);
+        rp.SetString(slot, "B", $"rec{n}");
+        Console.WriteLine($"inserting into slot {slot}: {{{n}, rec{n}}}");
+        slot = rp.InsertAfter(slot);
+    }
+
+    Console.WriteLine("Deleted these records with A-values < 25.");
+    int count = 0;
+    slot = rp.NextAfter(-1);
+    while (slot >= 0)
+    {
+        int a = rp.GetInt(slot, "A");
+        string b = rp.GetString(slot, "B");
+        if (a < 25)
+        {
+            count++;
+            Console.WriteLine($"slot {slot}: {{{a}, {b}}}");
+            rp.Delete(slot);
+        }
+        slot = rp.NextAfter(slot);
+    }
+    Console.WriteLine($"{count} values under 25 were deleted.\n");
+
+    Console.WriteLine("Here are the remaining records.");
+    slot = rp.NextAfter(-1);
+    while (slot >= 0)
+    {
+        int a = rp.GetInt(slot, "A");
+        string b = rp.GetString(slot, "B");
+        Console.WriteLine($"slot {slot}: {{{a}, {b}}}");
+        slot = rp.NextAfter(slot);
+    }
+
+    tx.Unpin(blk);
+    tx.Commit();
+}
+
 static class Assert
 {
     public static void Equal<T>(T? expected, T? actual)
@@ -2574,3 +2641,4 @@ static class Assert
         }
     }
 }
+
