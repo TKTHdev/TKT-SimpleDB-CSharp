@@ -31,7 +31,9 @@ public class Schema
 
     public void Add(string fieldname, Schema sch)
     {
-        throw new NotImplementedException();
+        int type = sch.Type(fieldname);
+        int length = sch.Length(fieldname);
+        AddField(fieldname, type, length);
     }
 
     public void AddAll(Schema sch)
