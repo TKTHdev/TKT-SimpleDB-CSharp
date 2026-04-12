@@ -19,7 +19,8 @@ public class RecordPage
 
     public int GetInt(int slot, string fieldname)
     {
-        throw new NotImplementedException();
+        int fldpos = OffSet(slot) + _layout.GetOffset(fieldname);
+        return _tx.GetInt(_blk, fldpos);
     }
 
     public string GetString(int slot, string fieldname)
