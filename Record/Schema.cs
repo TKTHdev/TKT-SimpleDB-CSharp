@@ -1,7 +1,7 @@
 ﻿using System.Reflection;
 using Microsoft.VisualBasic.CompilerServices;
 
-namespace DBSharp.Schema;
+namespace DBSharp.Record;
 
 public class Schema
 {
