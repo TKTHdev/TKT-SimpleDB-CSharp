@@ -46,7 +46,21 @@ public class RecordPage
 
     public void Format()
     {
-        throw new NotImplementedException();
+        int slot = 0;
+        while (IsValidSlot(slot))
+        {
+            _tx.SetInt(_blk, OffSet(slot), EMPTY, false);
+            Schema sch = _layout.GetSchema();
+            foreach (string fieldname in sch.Fields())
+            {
+                int fldpos = OffSet(slot) + _layout.GetOffset(fieldname);
+                if(sch.Type(fieldname)==Schema.SqlType.INTEGER) 
+                    _tx.SetInt(_blk, fldpos, 0, false);
+                else // when it is a string field
+                    _tx.SetString(_blk, fldpos, "", false);        
+            }
+            slot++;
+        }
     }
     public int NextAfter(int slot)
     {
