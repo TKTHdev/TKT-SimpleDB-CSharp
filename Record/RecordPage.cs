@@ -41,7 +41,7 @@ public class RecordPage
 
     public void Delete(int slot)
     {
-        throw new NotImplementedException();
+        SetFlag(slot, EMPTY);
     }
 
     public void Format()
