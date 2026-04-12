@@ -56,7 +56,7 @@ public class Schema
 
     public int Length(string fieldname)
     {
-        throw new NotImplementedException();
+        return info[fieldname].length;
     }
     private class FieldInfo
     {
