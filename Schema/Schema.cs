@@ -15,7 +15,8 @@ public class Schema
 
     public void AddField(string fieldname, int type, int length)
     {
-        throw new NotImplementedException();
+        fields.Add(fieldname);
+        info[fieldname] = new FieldInfo(type, length);
     }
 
     public void AddIntField(string fieldname)
