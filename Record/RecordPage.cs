@@ -64,7 +64,7 @@ public class RecordPage
     }
     public int NextAfter(int slot)
     {
-        throw new NotImplementedException();
+        return SearchAfter(slot, USED);
     }
 
     public int InsertAfter(int slot)
