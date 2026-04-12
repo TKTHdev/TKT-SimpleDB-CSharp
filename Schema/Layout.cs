@@ -15,8 +15,8 @@ public class Layout
         int pos = sizeof(int); // space for the empty/inuse flag
         foreach (string fieldname in schema.Fields())
         {
-           offsets.Add(fieldname, pos);
-           pos += lengthInBytes(fieldname);
+            offsets.Add(fieldname, pos);
+            pos += lengthInBytes(fieldname);
         }
         slotsize = pos;
     }
@@ -44,7 +44,7 @@ public class Layout
     {
         return slotsize;
     }
-    
+
 
     private int lengthInBytes(string fieldname)
     {

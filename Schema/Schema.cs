@@ -5,13 +5,13 @@ namespace DBSharp.Schema;
 
 public class Schema
 {
-    public static class  SqlType
+    public static class SqlType
     {
         public const int INTEGER = 0;
         public const int VARCHAR = 1;
     }
     private List<string> fields = new List<string>();
-    private Dictionary<string, FieldInfo> info = new  Dictionary<string, FieldInfo>();
+    private Dictionary<string, FieldInfo> info = new Dictionary<string, FieldInfo>();
 
     public void AddField(string fieldname, int type, int length)
     {
@@ -21,7 +21,7 @@ public class Schema
 
     public void AddIntField(string fieldname)
     {
-        AddField(fieldname,SqlType.INTEGER ,0 );
+        AddField(fieldname, SqlType.INTEGER, 0);
     }
 
     public void AddStringField(string fieldname, int length)
@@ -38,7 +38,7 @@ public class Schema
 
     public void AddAll(Schema sch)
     {
-        foreach(string fieldname in sch.fields)
+        foreach (string fieldname in sch.fields)
             Add(fieldname, sch);
     }
 
@@ -49,7 +49,7 @@ public class Schema
 
     public bool HasField(string fieldname)
     {
-        return  Fields().Contains(fieldname);
+        return Fields().Contains(fieldname);
     }
 
     public int Type(string fieldname)
