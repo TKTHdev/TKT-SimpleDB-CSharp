@@ -38,7 +38,8 @@ public class Schema
 
     public void AddAll(Schema sch)
     {
-        throw new NotImplementedException();
+        foreach(string fieldname in sch.fields)
+            Add(fieldname, sch);
     }
 
     public List<string> Fields()
