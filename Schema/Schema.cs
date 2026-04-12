@@ -58,9 +58,9 @@ public class Schema
     {
         throw new NotImplementedException();
     }
-    class FieldInfo
+    private class FieldInfo
     {
-        int type, length;
+        public int type, length;
         public FieldInfo(int type, int length)
         {
             this.type = type;
