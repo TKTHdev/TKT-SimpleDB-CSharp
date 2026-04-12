@@ -1,7 +1,6 @@
-﻿using System.Xml.Schema;
-using DBSharp.File;
+﻿using DBSharp.File;
 
-namespace DBSharp.Schema;
+namespace DBSharp.Record;
 
 public class Layout
 {
