@@ -87,7 +87,15 @@ public class RecordPage
 
     private int SearchAfter(int slot, int flag)
     {
-        throw new NotImplementedException();
+        slot++;
+        while (IsValidSlot(slot))
+        {
+            if (_tx.GetInt(_blk, OffSet(slot)) == flag)
+                return slot;
+            slot++;
+        }
+
+        return -1;
     }
 
     private bool IsValidSlot(int slot)
