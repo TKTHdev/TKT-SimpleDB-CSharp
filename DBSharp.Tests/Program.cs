@@ -3,6 +3,7 @@ using DBSharp.File;
 using DBSharp.Concurrency;
 using DBSharp.Log;
 using DBSharp.Transactions;
+using DBSharp.Schema;
 using System.Text;
 
 var tests = new (string Name, Action Body)[]
@@ -87,6 +88,7 @@ var tests = new (string Name, Action Body)[]
     ("WoundWait younger reader waits for older XLock holder then proceeds", WoundWait_YoungerReaderWaitsForOlderXLock),
     ("WoundWait older writer wounds younger SLock holders then proceeds", WoundWait_OlderWriterWoundsYoungerSLocks),
     ("WoundWait younger writer waits for older SLock holder then proceeds", WoundWait_YoungerWriterWaitsForOlderSLock),
+    ("Schema AddAll adds fields from another schema", Schema_AddAll),
 };
 
 var failures = new List<string>();
@@ -2519,6 +2521,28 @@ static void WoundWait_YoungerWriterWaitsForOlderSLock()
     Assert.Equal(99, reader.GetInt(blk, 0));
     reader.Commit();
     ConcurrencyMgr.ResetLockTable();
+}
+
+static void Schema_AddAll()
+{
+    var s1 = new Schema();
+    s1.AddIntField("A");
+    s1.AddStringField("B", 9);
+
+    var s2 = new Schema();
+    s2.AddIntField("C");
+    s2.AddAll(s1);
+
+    Assert.Equal(3, s2.Fields().Count);
+    Assert.True(s2.HasField("A"), "s2 should have field A");
+    Assert.Equal(Schema.SqlType.INTEGER, s2.Type("A"));
+    Assert.Equal(0, s2.Length("A"));
+    Assert.True(s2.HasField("B"), "s2 should have field B");
+    Assert.Equal(Schema.SqlType.VARCHAR, s2.Type("B"));
+    Assert.Equal(9, s2.Length("B"));
+    Assert.True(s2.HasField("C"), "s2 should have field C");
+    Assert.Equal(Schema.SqlType.INTEGER, s2.Type("C"));
+    Assert.Equal(0, s2.Length("C"));
 }
 
 static class Assert
