@@ -100,7 +100,7 @@ public class RecordPage
 
     private bool IsValidSlot(int slot)
     {
-        throw new NotImplementedException();
+        return OffSet(slot + 1) <= _tx.BlockSize();
     }
 
     private int OffSet(int slot)
