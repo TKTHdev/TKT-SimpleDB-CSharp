@@ -82,7 +82,7 @@ public class RecordPage
 
     private void SetFlag(int slot, int flag)
     {
-        throw new NotImplementedException();
+        _tx.SetInt(_blk, OffSet(slot),flag, true);
     }
 
     private int SearchAfter(int slot, int flag)
