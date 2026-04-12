@@ -69,7 +69,10 @@ public class RecordPage
 
     public int InsertAfter(int slot)
     {
-        throw new NotImplementedException();
+        int newslot = SearchAfter(slot, EMPTY);
+        if (newslot >= 0)
+            SetFlag(newslot, USED);
+        return newslot;
     }
 
     public BlockId Block()
