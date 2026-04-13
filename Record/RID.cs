@@ -20,4 +20,15 @@ public class RID
     {
         return _slot;
     }
+
+    public override bool Equals(object? obj)
+    {
+        if (obj is not RID r) return false;
+        return _blknum == r._blknum && _slot == r._slot;
+    }
+
+    public override int GetHashCode()
+    {
+        return HashCode.Combine(_blknum, _slot);
+    }
 }
