@@ -18,4 +18,21 @@ public class TableScan : UpdateScan
         if (_rp != null)
             _tx.Unpin(_rp.Block());
     }
+
+    private void MoveToBlock(int blknum)
+    {
+        Close();
+        BlockId blk = new BlockId(_filename, blknum);
+        _rp = new RecordPage(_tx, blk, _layout);
+        _currentSlot = -1;
+    }
+
+    private void MoveToNewBlock()
+    {
+        Close();
+        BlockId blk = _tx.Append(_filename);
+        _rp = new RecordPage(_tx, blk, _layout);
+        _rp.Format();
+        _currentSlot = -1;
+    }
 }
