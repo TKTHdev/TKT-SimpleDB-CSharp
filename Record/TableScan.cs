@@ -35,4 +35,9 @@ public class TableScan : UpdateScan
         _rp.Format();
         _currentSlot = -1;
     }
+
+    private bool AtLastBlock()
+    {
+        return _rp.Block().Number() == _tx.Size(_filename) - 1;
+    }
 }
