@@ -10,4 +10,14 @@ public class RID
         _blknum = blknum;
         _slot = slot;
     }
+
+    public int BlockNumber()
+    {
+        return _blknum;
+    }
+
+    public int Slot()
+    {
+        return _slot;
+    }
 }
