@@ -71,6 +71,16 @@ public class TableScan : UpdateScan
         return _layout.GetSchema().HasField(fieldname);
     }
 
+    public void SetInt(string fieldname, int val)
+    {
+        _rp.SetInt(_currentSlot, fieldname, val);
+    }
+
+    public void SetString(string fieldname, string val)
+    {
+        _rp.SetString(_currentSlot, fieldname, val);
+    }
+
     private void MoveToBlock(int blknum)
     {
         Close();
