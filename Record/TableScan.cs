@@ -102,6 +102,11 @@ public class TableScan : UpdateScan
         }
     }
 
+    public void Delete()
+    {
+        _rp.Delete(_currentSlot);
+    }
+
     private void MoveToBlock(int blknum)
     {
         Close();
