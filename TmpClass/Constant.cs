@@ -42,4 +42,12 @@ public class Constant : IComparable<Constant>, IEquatable<Constant>
     {
         return _ival.HasValue ? _ival.Value.GetHashCode() : _sval!.GetHashCode();
     }
+
+    public int CompareTo(Constant? other)
+    {
+        if (other is null) return 1;
+        return _ival.HasValue
+            ? _ival.Value.CompareTo(other._ival)
+            : string.Compare(_sval, other._sval, StringComparison.Ordinal);
+    }
 }
