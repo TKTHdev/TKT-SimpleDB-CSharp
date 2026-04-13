@@ -50,4 +50,9 @@ public class Constant : IComparable<Constant>, IEquatable<Constant>
             ? _ival.Value.CompareTo(other._ival)
             : string.Compare(_sval, other._sval, StringComparison.Ordinal);
     }
+
+    public override string ToString()
+    {
+        return _ival.HasValue ? _ival.Value.ToString() : _sval!;
+    }
 }
