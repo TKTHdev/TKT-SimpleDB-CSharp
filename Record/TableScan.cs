@@ -30,6 +30,11 @@ public class TableScan : UpdateScan
             _tx.Unpin(_rp.Block());
     }
 
+    public void BeforeFirst()
+    {
+        MoveToBlock(0);
+    }
+
     private void MoveToBlock(int blknum)
     {
         Close();
