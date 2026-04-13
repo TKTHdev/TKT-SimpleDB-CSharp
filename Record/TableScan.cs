@@ -107,6 +107,14 @@ public class TableScan : UpdateScan
         _rp.Delete(_currentSlot);
     }
 
+    public void MoveToRid(RID rid)
+    {
+        Close();
+        BlockId blk = new BlockId(_filename, rid.BlockNumber());
+        _rp = new RecordPage(_tx, blk, _layout);
+        _currentSlot = rid.Slot();
+    }
+
     private void MoveToBlock(int blknum)
     {
         Close();
