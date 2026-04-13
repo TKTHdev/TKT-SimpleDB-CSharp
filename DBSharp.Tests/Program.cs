@@ -90,6 +90,7 @@ var tests = new (string Name, Action Body)[]
     ("WoundWait younger writer waits for older SLock holder then proceeds", WoundWait_YoungerWriterWaitsForOlderSLock),
     ("Schema AddAll adds fields from another schema", Schema_AddAll),
     ("RecordPage format, insert, delete, and iterate", RecordPage_Test),
+    ("TableScan insert, iterate, delete across blocks", TableScan_Test),
 };
 
 var failures = new List<string>();
@@ -2609,6 +2610,66 @@ static void RecordPage_Test()
     }
 
     tx.Unpin(blk);
+    tx.Commit();
+}
+
+static void TableScan_Test()
+{
+    var (fm, lm, bm) = CreateTxTestDeps();
+    var tx = new Transaction(fm, lm, bm);
+
+    var sch = new Schema();
+    sch.AddIntField("A");
+    sch.AddStringField("B", 9);
+    var layout = new Layout(sch);
+    foreach (var fldname in layout.GetSchema().Fields())
+    {
+        int offset = layout.GetOffset(fldname);
+        Console.WriteLine($"{fldname} has offset {offset}");
+    }
+
+    string tblname = $"T{Guid.NewGuid():N}";
+    var ts = new TableScan(tx, tblname, layout);
+
+    Console.WriteLine("Filling the table with 50 random records.");
+    ts.BeforeFirst();
+    var rand = new Random();
+    for (int i = 0; i < 50; i++)
+    {
+        ts.Insert();
+        int n = (int)Math.Round(rand.NextDouble() * 50);
+        ts.SetInt("A", n);
+        ts.SetString("B", $"rec{n}");
+        Console.WriteLine($"inserting into slot {ts.GetRid()}: {{{n}, rec{n}}}");
+    }
+
+    Console.WriteLine("Deleting records with A-values < 25.");
+    int count = 0;
+    ts.BeforeFirst();
+    while (ts.Next())
+    {
+        int a = ts.GetInt("A");
+        string b = ts.GetString("B");
+        if (a < 25)
+        {
+            count++;
+            Console.WriteLine($"slot {ts.GetRid()}: {{{a}, {b}}}");
+            ts.Delete();
+        }
+    }
+    Console.WriteLine($"{count} values under 25 were deleted.\n");
+
+    Console.WriteLine("Here are the remaining records.");
+    ts.BeforeFirst();
+    while (ts.Next())
+    {
+        int a = ts.GetInt("A");
+        string b = ts.GetString("B");
+        Console.WriteLine($"slot {ts.GetRid()}: {{{a}, {b}}}");
+        Assert.True(a >= 25, $"record with A={a} should have been deleted");
+    }
+
+    ts.Close();
     tx.Commit();
 }
 
