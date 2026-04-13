@@ -115,6 +115,11 @@ public class TableScan : UpdateScan
         _currentSlot = rid.Slot();
     }
 
+    public RID GetRid()
+    {
+        return new RID(_rp.Block().Number(), _currentSlot);
+    }
+
     private void MoveToBlock(int blknum)
     {
         Close();
