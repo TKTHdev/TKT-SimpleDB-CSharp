@@ -14,4 +14,14 @@ public class Constant : IComparable<Constant>, IEquatable<Constant>
     {
         _sval = sval;
     }
+
+    public int AsInt()
+    {
+        return _ival!.Value;
+    }
+
+    public string AsString()
+    {
+        return _sval!;
+    }
 }
