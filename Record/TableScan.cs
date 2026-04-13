@@ -13,6 +13,17 @@ public class TableScan : UpdateScan
     private string _filename;
     private int _currentSlot;
 
+    public TableScan(Transaction tx, string tblname, Layout layout)
+    {
+        _tx = tx;
+        _layout = layout;
+        _filename = tblname + ".tbl";
+        if (tx.Size(_filename) == 0)
+            MoveToNewBlock();
+        else
+            MoveToBlock(0);
+    }
+
     public void Close()
     {
         if (_rp != null)
