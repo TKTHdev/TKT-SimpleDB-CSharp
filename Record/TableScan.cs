@@ -89,6 +89,19 @@ public class TableScan : UpdateScan
             SetString(fieldname, val.AsString());
     }
 
+    public void Insert()
+    {
+        _currentSlot = _rp.InsertAfter(_currentSlot);
+        while (_currentSlot < 0)
+        {
+            if (AtLastBlock())
+                MoveToNewBlock();
+            else
+                MoveToBlock(_rp.Block().Number() + 1);
+            _currentSlot = _rp.InsertAfter(_currentSlot);
+        }
+    }
+
     private void MoveToBlock(int blknum)
     {
         Close();
