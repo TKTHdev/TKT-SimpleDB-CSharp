@@ -35,6 +35,19 @@ public class TableScan : UpdateScan
         MoveToBlock(0);
     }
 
+    public bool Next()
+    {
+        _currentSlot = _rp.NextAfter(_currentSlot);
+        while (_currentSlot < 0)
+        {
+            if (AtLastBlock())
+                return false;
+            MoveToBlock(_rp.Block().Number() + 1);
+            _currentSlot = _rp.NextAfter(_currentSlot);
+        }
+        return true;
+    }
+
     private void MoveToBlock(int blknum)
     {
         Close();
