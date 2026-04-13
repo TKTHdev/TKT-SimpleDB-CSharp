@@ -66,6 +66,11 @@ public class TableScan : UpdateScan
             return new Constant(GetString(fieldname));
     }
 
+    public bool HasField(string fieldname)
+    {
+        return _layout.GetSchema().HasField(fieldname);
+    }
+
     private void MoveToBlock(int blknum)
     {
         Close();
