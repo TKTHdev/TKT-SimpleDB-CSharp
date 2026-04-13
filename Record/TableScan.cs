@@ -58,6 +58,14 @@ public class TableScan : UpdateScan
         return _rp.GetString(_currentSlot, fieldname);
     }
 
+    public Constant GetVal(string fieldname)
+    {
+        if (_layout.GetSchema().Type(fieldname) == Schema.SqlType.INTEGER)
+            return new Constant(GetInt(fieldname));
+        else
+            return new Constant(GetString(fieldname));
+    }
+
     private void MoveToBlock(int blknum)
     {
         Close();
