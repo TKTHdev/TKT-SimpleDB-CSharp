@@ -31,4 +31,9 @@ public class RID
     {
         return HashCode.Combine(_blknum, _slot);
     }
+
+    public override string ToString()
+    {
+        return $"[{_blknum}, {_slot}]";
+    }
 }
