@@ -48,6 +48,16 @@ public class TableScan : UpdateScan
         return true;
     }
 
+    public int GetInt(string fieldname)
+    {
+        return _rp.GetInt(_currentSlot, fieldname);
+    }
+
+    public string GetString(string fieldname)
+    {
+        return _rp.GetString(_currentSlot, fieldname);
+    }
+
     private void MoveToBlock(int blknum)
     {
         Close();
