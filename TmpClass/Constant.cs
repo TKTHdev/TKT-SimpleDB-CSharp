@@ -24,4 +24,22 @@ public class Constant : IComparable<Constant>, IEquatable<Constant>
     {
         return _sval!;
     }
+
+    public bool Equals(Constant? other)
+    {
+        if (other is null) return false;
+        return _ival.HasValue
+            ? _ival.Value.Equals(other._ival)
+            : _sval!.Equals(other._sval);
+    }
+
+    public override bool Equals(object? obj)
+    {
+        return obj is Constant c && Equals(c);
+    }
+
+    public override int GetHashCode()
+    {
+        return _ival.HasValue ? _ival.Value.GetHashCode() : _sval!.GetHashCode();
+    }
 }
