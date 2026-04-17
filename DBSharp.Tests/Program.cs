@@ -4,6 +4,7 @@ using DBSharp.Concurrency;
 using DBSharp.Log;
 using DBSharp.Transactions;
 using DBSharp.Record;
+using DBSharp.Metadata;
 using System.Text;
 
 var tests = new (string Name, Action Body)[]
@@ -91,6 +92,11 @@ var tests = new (string Name, Action Body)[]
     ("Schema AddAll adds fields from another schema", Schema_AddAll),
     ("RecordPage format, insert, delete, and iterate", RecordPage_Test),
     ("TableScan insert, iterate, delete across blocks", TableScan_Test),
+    ("TableMgr createTable and getLayout round trip", TableMgr_Test),
+    ("ViewMgr createView and getViewDef round trip", ViewMgr_Test),
+    ("StatMgr returns statistics for a table", StatMgr_Test),
+    ("IndexMgr createIndex and getIndexInfo round trip", IndexMgr_Test),
+    ("MetadataMgr facade delegates to all sub-managers", MetadataMgr_Test),
 };
 
 var failures = new List<string>();
@@ -2670,6 +2676,181 @@ static void TableScan_Test()
     }
 
     ts.Close();
+    tx.Commit();
+}
+
+// ── Metadata tests ──────────────────────────────────────────────────────────
+
+static void TableMgr_Test()
+{
+    var (fm, lm, bm) = CreateTxTestDeps();
+    var tx = new Transaction(fm, lm, bm);
+
+    var tm = new TableMgr(true, tx);
+
+    var sch = new Schema();
+    sch.AddIntField("A");
+    sch.AddStringField("B", 9);
+    tm.CreateTable("MyTable", sch, tx);
+
+    Layout layout = tm.GetLayout("MyTable", tx);
+    Schema sch2 = layout.GetSchema();
+    int size = layout.GetSlotSize();
+
+    Assert.True(size > 0, "slot size should be positive");
+    Assert.True(sch2.Fields().Contains("A"), "schema should have field A");
+    Assert.True(sch2.Fields().Contains("B"), "schema should have field B");
+    Assert.Equal(Schema.SqlType.INTEGER, sch2.Type("A"));
+    Assert.Equal(Schema.SqlType.VARCHAR, sch2.Type("B"));
+    Assert.Equal(9, sch2.Length("B"));
+
+    // verify offsets match a freshly computed layout
+    var expectedLayout = new Layout(sch);
+    Assert.Equal(expectedLayout.GetOffset("A"), layout.GetOffset("A"));
+    Assert.Equal(expectedLayout.GetOffset("B"), layout.GetOffset("B"));
+    Assert.Equal(expectedLayout.GetSlotSize(), layout.GetSlotSize());
+
+    tx.Commit();
+}
+
+static void ViewMgr_Test()
+{
+    var (fm, lm, bm) = CreateTxTestDeps();
+    var tx = new Transaction(fm, lm, bm);
+
+    var tm = new TableMgr(true, tx);
+    var vm = new ViewMgr(true, tm, tx);
+
+    string viewDef = "select B from MyTable where A = 1";
+    vm.CreateView("viewA", viewDef, tx);
+
+    string? retrieved = vm.GetViewDef("viewA", tx);
+    Assert.Equal(viewDef, retrieved);
+
+    // non-existent view returns null
+    string? missing = vm.GetViewDef("noSuchView", tx);
+    Assert.True(missing == null, "non-existent view should return null");
+
+    tx.Commit();
+}
+
+static void StatMgr_Test()
+{
+    var (fm, lm, bm) = CreateTxTestDeps();
+    var tx = new Transaction(fm, lm, bm);
+
+    var tm = new TableMgr(true, tx);
+
+    var sch = new Schema();
+    sch.AddIntField("A");
+    sch.AddStringField("B", 9);
+    tm.CreateTable("MyTable", sch, tx);
+
+    Layout layout = tm.GetLayout("MyTable", tx);
+
+    // insert 50 records
+    var ts = new TableScan(tx, "MyTable", layout);
+    for (int i = 0; i < 50; i++)
+    {
+        ts.Insert();
+        ts.SetInt("A", i);
+        ts.SetString("B", $"rec{i}");
+    }
+    ts.Close();
+
+    var sm = new StatMgr(tm, tx);
+    StatInfo si = sm.GetStatInfo("MyTable", layout, tx);
+
+    Assert.True(si.BlocksAccessed() > 0, "blocks accessed should be > 0");
+    Assert.Equal(50, si.RecordsOutput());
+    Assert.True(si.DistinctValues("A") > 0, "distinct values should be > 0");
+
+    tx.Commit();
+}
+
+static void IndexMgr_Test()
+{
+    var (fm, lm, bm) = CreateTxTestDeps();
+    var tx = new Transaction(fm, lm, bm);
+
+    var tm = new TableMgr(true, tx);
+
+    var sch = new Schema();
+    sch.AddIntField("A");
+    sch.AddStringField("B", 9);
+    tm.CreateTable("MyTable", sch, tx);
+
+    var sm = new StatMgr(tm, tx);
+    var im = new IndexMgr(true, tm, sm, tx);
+
+    im.CreateIndex("indexA", "MyTable", "A", tx);
+    im.CreateIndex("indexB", "MyTable", "B", tx);
+
+    var indexes = im.GetIndexInfo("MyTable", tx);
+    Assert.True(indexes.ContainsKey("A"), "should have index on field A");
+    Assert.True(indexes.ContainsKey("B"), "should have index on field B");
+
+    IndexInfo iiA = indexes["A"];
+    Assert.True(iiA.BlocksAccessed() >= 0, "blocks accessed should be >= 0");
+    Assert.True(iiA.RecordsOutput() >= 0, "records output should be >= 0");
+    Assert.Equal(1, iiA.DistinctValues("A"));
+
+    tx.Commit();
+}
+
+static void MetadataMgr_Test()
+{
+    var (fm, lm, bm) = CreateTxTestDeps();
+    var tx = new Transaction(fm, lm, bm);
+
+    var mdm = new MetadataMgr(true, tx);
+
+    // Part 1: Table Metadata
+    var sch = new Schema();
+    sch.AddIntField("A");
+    sch.AddStringField("B", 9);
+    mdm.CreateTable("MyTable", sch, tx);
+
+    Layout layout = mdm.GetLayout("MyTable", tx);
+    Assert.True(layout.GetSlotSize() > 0, "slot size should be positive");
+    Schema sch2 = layout.GetSchema();
+    Assert.Equal(Schema.SqlType.INTEGER, sch2.Type("A"));
+    Assert.Equal(Schema.SqlType.VARCHAR, sch2.Type("B"));
+
+    // Part 2: Statistics Metadata
+    var ts = new TableScan(tx, "MyTable", layout);
+    for (int i = 0; i < 50; i++)
+    {
+        ts.Insert();
+        ts.SetInt("A", i);
+        ts.SetString("B", $"rec{i}");
+    }
+    ts.Close();
+
+    StatInfo si = mdm.GetStatInfo("MyTable", layout, tx);
+    Assert.True(si.BlocksAccessed() > 0, "B(MyTable) should be > 0");
+    Assert.Equal(50, si.RecordsOutput());
+    Assert.True(si.DistinctValues("A") > 0, "V(MyTable,A) should be > 0");
+
+    // Part 3: View Metadata
+    string viewdef = "select B from MyTable where A = 1";
+    mdm.CreateView("viewA", viewdef, tx);
+    string? v = mdm.GetViewDef("viewA", tx);
+    Assert.Equal(viewdef, v);
+
+    // Part 4: Index Metadata
+    mdm.CreateIndex("indexA", "MyTable", "A", tx);
+    mdm.CreateIndex("indexB", "MyTable", "B", tx);
+    var idxmap = mdm.GetIndexInfo("MyTable", tx);
+    Assert.True(idxmap.ContainsKey("A"), "should have index on A");
+    Assert.True(idxmap.ContainsKey("B"), "should have index on B");
+
+    IndexInfo ii = idxmap["A"];
+    Assert.True(ii.BlocksAccessed() >= 0, "B(indexA) should be >= 0");
+    Assert.True(ii.RecordsOutput() >= 0, "R(indexA) should be >= 0");
+    Assert.True(ii.DistinctValues("A") >= 0, "V(indexA,A) should be >= 0");
+    Assert.True(ii.DistinctValues("B") >= 0, "V(indexA,B) should be >= 0");
+
     tx.Commit();
 }
 
