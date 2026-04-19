@@ -52,4 +52,46 @@ public class SelectScan : IUpdateScan
     {
         _s.Close();
     }
+
+    public void SetInt(string fldname, int value)
+    {
+        IUpdateScan us  = _s as IUpdateScan;
+        us.SetInt(fldname, value);
+    }
+
+    public void SetString(string fldname, string value)
+    {
+        IUpdateScan us  = _s as IUpdateScan;
+        us.SetString(fldname, value);
+    }
+
+    public void SetVal(string fldname, Constant value)
+    {
+        IUpdateScan us  = _s as IUpdateScan;
+        us.SetVal(fldname, value);
+    }
+
+    public void Delete()
+    {
+        IUpdateScan us  = _s as IUpdateScan;
+        us.Delete();
+    }
+
+    public void Insert()
+    {
+        IUpdateScan us  = _s as IUpdateScan;
+        us.Insert();
+    }
+
+    public RID GetRid()
+    {
+        IUpdateScan us  = _s as IUpdateScan;
+        return us.GetRid();
+    }
+
+    public void MoveToRid(RID rid)
+    {
+        IUpdateScan us  = _s as IUpdateScan;
+        us.MoveToRid(rid);
+    }
 }
