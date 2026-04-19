@@ -4,6 +4,13 @@ namespace DBSharp.Scan;
 using DBSharp.TmpClass;
 
 
+/*
+ * We assume that underlying scan is also updatable:
+ * in particular, they assume that they can cast
+ * the underlying scan to UpdateScan without
+ * causing a ClassCastException
+ */
+
 public interface IUpdateScan: IScan
 {
     public void SetInt(string fidname, int val);
