@@ -1,8 +1,17 @@
-﻿namespace DBSharp.Scan;
+namespace DBSharp.Scan;
+using DBSharp.TmpClass;
+using DBSharp.Record;
 
-public class SelectScan
+
+
+public class SelectScan : IUpdateScan
 {
-    private IScan s;
-    private Predicate pred;
+    private IScan _s;
+    private Predicate _pred;
 
+    public SelectScan(IScan s, Predicate p)
+    {
+        _s = s;
+        _pred = _pred;
+    }
 }
