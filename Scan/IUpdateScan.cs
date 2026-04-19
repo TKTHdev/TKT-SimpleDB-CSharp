@@ -3,6 +3,7 @@ using DBSharp.Record;
 namespace DBSharp.Scan;
 using DBSharp.TmpClass;
 
+
 public interface IUpdateScan: IScan
 {
     public void SetInt(string fidname, int val);
