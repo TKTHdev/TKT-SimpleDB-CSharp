@@ -31,6 +31,30 @@ public class ProductScan : IScan
         }
     }
 
+    public int GetInt(string fldname)
+    {
+        if (_s1.HasField(fldname))
+            return _s1.GetInt(fldname);
+        else
+            return _s2.GetInt(fldname);
+    }
+
+    public string GetString(string fldname)
+    {
+        if (_s1.HasField(fldname))
+            return _s1.GetString(fldname);
+        else
+            return _s2.GetString(fldname);
+    }
+
+    public Constant GetVal(string fldname)
+    {
+        if (_s1.HasField(fldname))
+            return _s1.GetVal(fldname);
+        else
+            return _s2.GetVal(fldname);
+    }
+
     public bool HasField(string fldname)
     {
         return  _s1.HasField(fldname) ||  _s2.HasField(fldname);
