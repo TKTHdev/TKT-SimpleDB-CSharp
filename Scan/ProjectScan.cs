@@ -11,4 +11,19 @@ public class ProjectScan : IScan
         _s = scan;
         this.fieldlist = fieldlist;
     }
+
+    public void BeforeFirst()
+    {
+        _s.BeforeFirst();
+    }
+
+    public bool Next()
+    {
+        return _s.Next();
+    }
+
+    public void Close()
+    {
+        _s.Close();
+    }
 }
