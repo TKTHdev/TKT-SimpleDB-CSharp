@@ -10,12 +10,17 @@ public class ProductScan : IScan
     {
         _s1 = s1;
         _s2 = s2;
+        // Position s1 on its first row so that Next() can treat s1 as the
+        // fixed outer row while iterating s2 as the inner loop.
         _s1.Next();
     }
 
     public void BeforeFirst()
     {
         _s1.BeforeFirst();
+        // Same reason as in the constructor: s1 must be on a row before Next()
+        // starts scanning s2, otherwise GetInt on s1's fields would have no
+        // current row.
         _s1.Next();
         _s2.BeforeFirst();
     }
