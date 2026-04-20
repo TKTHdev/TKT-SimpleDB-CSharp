@@ -22,6 +22,30 @@ public class ProjectScan : IScan
         return _s.Next();
     }
 
+    public int GetInt(string fldname)
+    {
+        if(HasField(fldname))
+            return _s.GetInt(fldname);
+        else
+            throw new Exception("Field not found");
+    }
+
+    public string GetString(string fldname)
+    {
+         if(HasField(fldname))
+            return _s.GetString(fldname);
+         else
+            throw new Exception("Field not found");
+    }
+
+    public Constant GetVal(string fldname)
+    {
+        if(HasField(fldname))
+            return _s.GetVal(fldname);
+        else
+            throw new Exception("Field not found");
+    }
+
     public bool HasField(string fldname)
     {
         return fieldlist.Contains(fldname);
