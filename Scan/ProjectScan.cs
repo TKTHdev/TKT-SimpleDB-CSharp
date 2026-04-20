@@ -22,6 +22,11 @@ public class ProjectScan : IScan
         return _s.Next();
     }
 
+    public bool HasField(string fldname)
+    {
+        return fieldlist.Contains(fldname);
+    }
+
     public void Close()
     {
         _s.Close();
