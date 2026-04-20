@@ -59,4 +59,11 @@ public class ProductScan : IScan
     {
         return  _s1.HasField(fldname) ||  _s2.HasField(fldname);
     }
+
+    public void Close()
+    {
+        _s1.Close();
+        _s2.Close();
+    }
+
 }
