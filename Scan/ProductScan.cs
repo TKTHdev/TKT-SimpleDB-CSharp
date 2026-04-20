@@ -30,4 +30,9 @@ public class ProductScan : IScan
             return _s2.Next() && _s1.Next();
         }
     }
+
+    public bool HasField(string fldname)
+    {
+        return  _s1.HasField(fldname) ||  _s2.HasField(fldname);
+    }
 }
