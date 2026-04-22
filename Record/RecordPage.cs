@@ -25,17 +25,17 @@ public class RecordPage
 
     public string GetString(int slot, string fieldname)
     {
-        int  fldpos = OffSet(slot) + _layout.GetOffset(fieldname);
+        int fldpos = OffSet(slot) + _layout.GetOffset(fieldname);
         return _tx.GetString(_blk, fldpos);
     }
     public void SetInt(int slot, string fieldname, int value)
     {
-        int fldpos  = OffSet(slot) + _layout.GetOffset(fieldname);
+        int fldpos = OffSet(slot) + _layout.GetOffset(fieldname);
         _tx.SetInt(_blk, fldpos, value, true);
     }
     public void SetString(int slot, string fieldname, string value)
     {
-        int fldpos   = OffSet(slot) + _layout.GetOffset(fieldname);
+        int fldpos = OffSet(slot) + _layout.GetOffset(fieldname);
         _tx.SetString(_blk, fldpos, value, true);
     }
 
@@ -54,10 +54,10 @@ public class RecordPage
             foreach (string fieldname in sch.Fields())
             {
                 int fldpos = OffSet(slot) + _layout.GetOffset(fieldname);
-                if(sch.Type(fieldname)==Schema.SqlType.INTEGER) 
+                if (sch.Type(fieldname) == Schema.SqlType.INTEGER)
                     _tx.SetInt(_blk, fldpos, 0, false);
                 else // when it is a string field
-                    _tx.SetString(_blk, fldpos, "", false);        
+                    _tx.SetString(_blk, fldpos, "", false);
             }
             slot++;
         }
@@ -82,7 +82,7 @@ public class RecordPage
 
     private void SetFlag(int slot, int flag)
     {
-        _tx.SetInt(_blk, OffSet(slot),flag, true);
+        _tx.SetInt(_blk, OffSet(slot), flag, true);
     }
 
     private int SearchAfter(int slot, int flag)
@@ -107,5 +107,5 @@ public class RecordPage
     {
         return slot * _layout.GetSlotSize();
     }
-    
+
 }

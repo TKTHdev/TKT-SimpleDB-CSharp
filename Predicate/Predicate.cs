@@ -7,8 +7,8 @@ public class Predicate
 {
     private List<Term> _terms = new();
 
-    public Predicate() {}
-    public Predicate(Term t)=>_terms.Add(t);
+    public Predicate() { }
+    public Predicate(Term t) => _terms.Add(t);
 
     public void ConjoinWith(Predicate pred)
     {

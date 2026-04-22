@@ -11,7 +11,7 @@ using DBSharp.Predicate;
  * causing a ClassCastException
  */
 
-public interface IUpdateScan: IScan
+public interface IUpdateScan : IScan
 {
     public void SetInt(string fidname, int val);
     public void SetString(string fldname, string val);

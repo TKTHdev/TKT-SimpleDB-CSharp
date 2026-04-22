@@ -62,7 +62,7 @@ public class ProductScan : IScan
 
     public bool HasField(string fldname)
     {
-        return  _s1.HasField(fldname) ||  _s2.HasField(fldname);
+        return _s1.HasField(fldname) || _s2.HasField(fldname);
     }
 
     public void Close()

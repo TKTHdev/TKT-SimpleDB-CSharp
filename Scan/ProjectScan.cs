@@ -24,7 +24,7 @@ public class ProjectScan : IScan
 
     public int GetInt(string fldname)
     {
-        if(HasField(fldname))
+        if (HasField(fldname))
             return _s.GetInt(fldname);
         else
             throw new Exception("Field not found");
@@ -32,15 +32,15 @@ public class ProjectScan : IScan
 
     public string GetString(string fldname)
     {
-         if(HasField(fldname))
+        if (HasField(fldname))
             return _s.GetString(fldname);
-         else
+        else
             throw new Exception("Field not found");
     }
 
     public Constant GetVal(string fldname)
     {
-        if(HasField(fldname))
+        if (HasField(fldname))
             return _s.GetVal(fldname);
         else
             throw new Exception("Field not found");

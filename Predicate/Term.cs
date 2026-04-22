@@ -41,7 +41,7 @@ public class Term
 
     public string ToString()
     {
-        return _lhs.ToString() + "="+ _rhs.ToString();
+        return _lhs.ToString() + "=" + _rhs.ToString();
     }
-    
+
 }
