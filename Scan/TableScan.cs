@@ -1,11 +1,11 @@
-using DBSharp.TmpInterface;
+using DBSharp.Scan;
 using DBSharp.Transactions;
 using DBSharp.TmpClass;
 using DBSharp.File;
 
 namespace DBSharp.Record;
 
-public class TableScan : UpdateScan
+public class TableScan : IUpdateScan
 {
     private Transaction _tx;
     private Layout _layout;
