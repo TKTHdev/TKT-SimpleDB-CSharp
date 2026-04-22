@@ -1,7 +1,7 @@
 using DBSharp.Record;
 
 namespace DBSharp.Scan;
-using DBSharp.TmpClass;
+using DBSharp.Predicate;
 
 
 /*

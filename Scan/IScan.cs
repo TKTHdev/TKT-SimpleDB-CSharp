@@ -1,4 +1,4 @@
-﻿using DBSharp.TmpClass;
+﻿using DBSharp.Predicate;
 
 namespace DBSharp.Scan;
 

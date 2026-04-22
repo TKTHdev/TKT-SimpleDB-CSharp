@@ -1,6 +1,6 @@
 using DBSharp.Scan;
 using DBSharp.Transactions;
-using DBSharp.TmpClass;
+using DBSharp.Predicate;
 using DBSharp.File;
 
 namespace DBSharp.Record;

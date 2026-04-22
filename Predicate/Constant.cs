@@ -1,4 +1,4 @@
-namespace DBSharp.TmpClass;
+namespace DBSharp.Predicate;
 
 public class Constant : IComparable<Constant>, IEquatable<Constant>
 {

@@ -1,5 +1,5 @@
 namespace DBSharp.Scan;
-using DBSharp.TmpClass;
+using DBSharp.Predicate;
 using DBSharp.Record;
 
 
