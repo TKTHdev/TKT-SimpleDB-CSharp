@@ -5,6 +5,8 @@ using DBSharp.Log;
 using DBSharp.Transactions;
 using DBSharp.Record;
 using DBSharp.Metadata;
+using DBSharp.Predicate;
+using DBSharp.Scan;
 using System.Text;
 
 var tests = new (string Name, Action Body)[]
@@ -97,6 +99,13 @@ var tests = new (string Name, Action Body)[]
     ("StatMgr returns statistics for a table", StatMgr_Test),
     ("IndexMgr createIndex and getIndexInfo round trip", IndexMgr_Test),
     ("MetadataMgr facade delegates to all sub-managers", MetadataMgr_Test),
+    ("Predicate empty predicate is always satisfied", Predicate_EmptyIsSatisfied),
+    ("Predicate single matching term is satisfied", Predicate_SingleTermSatisfied),
+    ("Predicate single non-matching term is not satisfied", Predicate_SingleTermNotSatisfied),
+    ("Predicate ConjoinWith all terms satisfied returns true", Predicate_ConjoinWithAllSatisfied),
+    ("Predicate ConjoinWith one failing term returns false", Predicate_ConjoinWithOneFails),
+    ("Predicate ToString single term", Predicate_ToString_SingleTerm),
+    ("Predicate ToString multiple terms joined with and", Predicate_ToString_MultipleTerms),
 };
 
 var failures = new List<string>();
@@ -2852,6 +2861,95 @@ static void MetadataMgr_Test()
     Assert.True(ii.DistinctValues("B") >= 0, "V(indexA,B) should be >= 0");
 
     tx.Commit();
+}
+
+// ── Predicate tests ──────────────────────────────────────────────────────────
+
+static void Predicate_EmptyIsSatisfied()
+{
+    var pred = new Predicate();
+    var scan = new StubScan();
+
+    Assert.True(pred.IsSatisfied(scan), "Empty predicate should always be satisfied.");
+}
+
+static void Predicate_SingleTermSatisfied()
+{
+    var scan = new StubScan();
+    scan.SetVal("age", new Constant(30));
+
+    var term = new Term(new Expression("age"), new Expression(new Constant(30)));
+    var pred = new Predicate(term);
+
+    Assert.True(pred.IsSatisfied(scan), "Predicate with matching term should be satisfied.");
+}
+
+static void Predicate_SingleTermNotSatisfied()
+{
+    var scan = new StubScan();
+    scan.SetVal("age", new Constant(25));
+
+    var term = new Term(new Expression("age"), new Expression(new Constant(30)));
+    var pred = new Predicate(term);
+
+    Assert.False(pred.IsSatisfied(scan), "Predicate with non-matching term should not be satisfied.");
+}
+
+static void Predicate_ConjoinWithAllSatisfied()
+{
+    var scan = new StubScan();
+    scan.SetVal("age", new Constant(30));
+    scan.SetVal("name", new Constant("alice"));
+
+    var pred1 = new Predicate(new Term(new Expression("age"), new Expression(new Constant(30))));
+    var pred2 = new Predicate(new Term(new Expression("name"), new Expression(new Constant("alice"))));
+    pred1.ConjoinWith(pred2);
+
+    Assert.True(pred1.IsSatisfied(scan), "Conjoined predicate should be satisfied when all terms match.");
+}
+
+static void Predicate_ConjoinWithOneFails()
+{
+    var scan = new StubScan();
+    scan.SetVal("age", new Constant(30));
+    scan.SetVal("name", new Constant("bob"));
+
+    var pred1 = new Predicate(new Term(new Expression("age"), new Expression(new Constant(30))));
+    var pred2 = new Predicate(new Term(new Expression("name"), new Expression(new Constant("alice"))));
+    pred1.ConjoinWith(pred2);
+
+    Assert.False(pred1.IsSatisfied(scan), "Conjoined predicate should not be satisfied when one term fails.");
+}
+
+static void Predicate_ToString_SingleTerm()
+{
+    var term = new Term(new Expression("age"), new Expression(new Constant(30)));
+    var pred = new Predicate(term);
+
+    Assert.Equal("age=30", pred.ToString());
+}
+
+static void Predicate_ToString_MultipleTerms()
+{
+    var pred = new Predicate(new Term(new Expression("age"), new Expression(new Constant(30))));
+    pred.ConjoinWith(new Predicate(new Term(new Expression("name"), new Expression(new Constant("alice")))));
+
+    Assert.Equal("age=30 and name=alice", pred.ToString());
+}
+
+class StubScan : IScan
+{
+    private readonly Dictionary<string, Constant> _vals = new();
+
+    public void SetVal(string fldname, Constant val) => _vals[fldname] = val;
+
+    public Constant GetVal(string fldname) => _vals[fldname];
+    public int GetInt(string fldname) => GetVal(fldname).AsInt();
+    public string GetString(string fldname) => GetVal(fldname).AsString();
+    public bool HasField(string fldname) => _vals.ContainsKey(fldname);
+    public void BeforeFirst() { }
+    public bool Next() => false;
+    public void Close() { }
 }
 
 static class Assert

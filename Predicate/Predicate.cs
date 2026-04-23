@@ -48,7 +48,7 @@ public class Predicate
         throw new NotImplementedException();
     }
 
-    public string ToString()
+    public override string ToString()
     {
         return string.Join(" and ", _terms);
     }

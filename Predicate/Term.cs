@@ -39,7 +39,7 @@ public class Term
         throw new NotImplementedException();
     }
 
-    public string ToString()
+    public override string ToString()
     {
         return _lhs.ToString() + "=" + _rhs.ToString();
     }

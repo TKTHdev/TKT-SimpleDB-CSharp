@@ -42,7 +42,7 @@ public class Expression
         return (val != null) ? true : sch.HasField(fldname);
     }
 
-    public String ToString()
+    public override string ToString()
     {
         return (val != null) ? val.ToString() : fldname;
     }
