@@ -99,6 +99,8 @@ public class Parser
             return Insert();
         else if (_lex.MatchKeyword("delete"))
             return Delete();
+        else if (_lex.MatchKeyword("update"))
+            return Modify();
         throw new NotImplementedException();
     }
 
@@ -155,5 +157,23 @@ public class Parser
             L.AddRange(ConstList());
         }
         return L;
+    }
+
+    // Method for parsing modify commands
+    public ModifyData Modify()
+    {
+        _lex.EatKeyword("update");
+        string tblname = _lex.EatId();
+        _lex.EatKeyword("set");
+        string fldname = Field();
+        _lex.EatDelim('=');
+        Expression newval = Expression();
+        Predicate pred = new Predicate();
+        if (_lex.MatchKeyword("where"))
+        {
+            _lex.EatKeyword("where");
+            pred = Predicate();
+        }
+        return new ModifyData(tblname, fldname, newval, pred);
     }
 }
