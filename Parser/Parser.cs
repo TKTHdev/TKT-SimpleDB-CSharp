@@ -113,7 +113,8 @@ public class Parser
             return CreateTable();
         else if (_lex.MatchKeyword("view"))
             return CreateView();
-        throw new NotImplementedException();
+        else
+            return CreateIndex();
     }
 
     // Method for parsing delete commands
@@ -244,5 +245,18 @@ public class Parser
         _lex.EatKeyword("as");
         QueryData qd = Query();
         return new CreateViewData(viewname, qd);
+    }
+
+    // Method for parsing CREATE INDEX
+    private CreateIndexData CreateIndex()
+    {
+        _lex.EatKeyword("index");
+        string idxname = _lex.EatId();
+        _lex.EatKeyword("on");
+        string tblname = _lex.EatId();
+        _lex.EatDelim('(');
+        string fldname = Field();
+        _lex.EatDelim(')');
+        return new CreateIndexData(idxname, tblname, fldname);
     }
 }
