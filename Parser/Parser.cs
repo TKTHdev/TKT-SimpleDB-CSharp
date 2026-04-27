@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 namespace DBSharp.Parser;
 using DBSharp.Predicate;
+using DBSharp.Record;
 
 public class Parser
 {
@@ -101,6 +102,15 @@ public class Parser
             return Delete();
         else if (_lex.MatchKeyword("update"))
             return Modify();
+        else
+            return Create();
+    }
+
+    private Object Create()
+    {
+        _lex.EatKeyword("create");
+        if (_lex.MatchKeyword("table"))
+            return CreateTable();
         throw new NotImplementedException();
     }
 
@@ -175,5 +185,52 @@ public class Parser
             pred = Predicate();
         }
         return new ModifyData(tblname, fldname, newval, pred);
+    }
+
+    // Methods for parsing CREATE TABLE
+    private CreateTableData CreateTable()
+    {
+        _lex.EatKeyword("table");
+        string tblname = _lex.EatId();
+        _lex.EatDelim('(');
+        Schema sch = FieldDefs();
+        _lex.EatDelim(')');
+        return new CreateTableData(tblname, sch);
+    }
+
+    private Schema FieldDefs()
+    {
+        Schema schema = FieldDef();
+        if (_lex.MatchDelim(','))
+        {
+            _lex.EatDelim(',');
+            schema.AddAll(FieldDefs());
+        }
+        return schema;
+    }
+
+    private Schema FieldDef()
+    {
+        string fldname = Field();
+        return FieldType(fldname);
+    }
+
+    private Schema FieldType(string fldname)
+    {
+        Schema schema = new Schema();
+        if (_lex.MatchKeyword("int"))
+        {
+            _lex.EatKeyword("int");
+            schema.AddIntField(fldname);
+        }
+        else
+        {
+            _lex.EatKeyword("varchar");
+            _lex.EatDelim('(');
+            int strLen = _lex.EatIntConstant();
+            _lex.EatDelim(')');
+            schema.AddStringField(fldname, strLen);
+        }
+        return schema;
     }
 }
