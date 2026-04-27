@@ -111,6 +111,8 @@ public class Parser
         _lex.EatKeyword("create");
         if (_lex.MatchKeyword("table"))
             return CreateTable();
+        else if (_lex.MatchKeyword("view"))
+            return CreateView();
         throw new NotImplementedException();
     }
 
@@ -232,5 +234,15 @@ public class Parser
             schema.AddStringField(fldname, strLen);
         }
         return schema;
+    }
+
+    // Method for parsing CREATE VIEW
+    private CreateViewData CreateView()
+    {
+        _lex.EatKeyword("view");
+        string viewname = _lex.EatId();
+        _lex.EatKeyword("as");
+        QueryData qd = Query();
+        return new CreateViewData(viewname, qd);
     }
 }
