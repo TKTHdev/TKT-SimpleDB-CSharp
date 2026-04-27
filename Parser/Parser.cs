@@ -93,5 +93,25 @@ public class Parser
     }
 
     // Methods for parsing the various update commands
-    public Object UpdateCmd() => throw new NotImplementedException();
+    public Object UpdateCmd()
+    {
+        if (_lex.MatchKeyword("delete"))
+            return Delete();
+        throw new NotImplementedException();
+    }
+
+    // Method for parsing delete commands
+    public DeleteData Delete()
+    {
+        _lex.EatKeyword("delete");
+        _lex.EatKeyword("from");
+        string tblname = _lex.EatId();
+        Predicate pred = new Predicate();
+        if (_lex.MatchKeyword("where"))
+        {
+            _lex.EatKeyword("where");
+            pred = Predicate();
+        }
+        return new DeleteData(tblname, pred);
+    }
 }
