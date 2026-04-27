@@ -95,7 +95,9 @@ public class Parser
     // Methods for parsing the various update commands
     public Object UpdateCmd()
     {
-        if (_lex.MatchKeyword("delete"))
+        if (_lex.MatchKeyword("insert"))
+            return Insert();
+        else if (_lex.MatchKeyword("delete"))
             return Delete();
         throw new NotImplementedException();
     }
@@ -113,5 +115,45 @@ public class Parser
             pred = Predicate();
         }
         return new DeleteData(tblname, pred);
+    }
+
+    // Methods for parsing insert commands
+    public InsertData Insert()
+    {
+        _lex.EatKeyword("insert");
+        _lex.EatKeyword("into");
+        string tblname = _lex.EatId();
+        _lex.EatDelim('(');
+        List<string> flds = FieldList();
+        _lex.EatDelim(')');
+        _lex.EatKeyword("values");
+        _lex.EatDelim('(');
+        List<Constant> vals = ConstList();
+        _lex.EatDelim(')');
+        return new InsertData(tblname, flds, vals);
+    }
+
+    private List<string> FieldList()
+    {
+        List<string> L = new();
+        L.Add(Field());
+        if (_lex.MatchDelim(','))
+        {
+            _lex.EatDelim(',');
+            L.AddRange(FieldList());
+        }
+        return L;
+    }
+
+    private List<Constant> ConstList()
+    {
+        List<Constant> L = new();
+        L.Add(Constant());
+        if (_lex.MatchDelim(','))
+        {
+            _lex.EatDelim(',');
+            L.AddRange(ConstList());
+        }
+        return L;
     }
 }
