@@ -8,6 +8,9 @@ using DBSharp.Metadata;
 using DBSharp.Predicate;
 using DBSharp.Scan;
 using DBSharp.Planner;
+using DBSharp.Jdbc;
+using DBSharp.Jdbc.Embedded;
+using DBSharp.Jdbc.Network;
 using System.Text;
 
 var tests = new (string Name, Action Body)[]
@@ -108,6 +111,12 @@ var tests = new (string Name, Action Body)[]
     ("Predicate ConjoinWith one failing term returns false", Predicate_ConjoinWithOneFails),
     ("Predicate ToString single term", Predicate_ToString_SingleTerm),
     ("Predicate ToString multiple terms joined with and", Predicate_ToString_MultipleTerms),
+    ("SimpleDB creates database and NewTx works", SimpleDB_CreateAndNewTx),
+    ("EmbeddedDriver connect returns EmbeddedConnection", EmbeddedDriver_Connect),
+    ("EmbeddedConnection executeUpdate and executeQuery work end-to-end", EmbeddedConnection_QueryAndUpdate),
+    ("EmbeddedMetaData reports correct column metadata", EmbeddedMetaData_ColumnInfo),
+    ("EmbeddedConnection rollback on bad SQL", EmbeddedConnection_RollbackOnError),
+    ("NetworkServer and NetworkDriver communicate end-to-end", Network_QueryAndUpdate),
 };
 
 var failures = new List<string>();
@@ -2972,6 +2981,144 @@ static void Predicate_ToString_MultipleTerms()
     pred.ConjoinWith(new Predicate(new Term(new Expression("name"), new Expression(new Constant("alice")))));
 
     Assert.Equal("age=30 and name=alice", pred.ToString());
+}
+
+// ── SimpleDB / JDBC tests ─────────────────────────────────────────────────────
+
+static void SimpleDB_CreateAndNewTx()
+{
+    ConcurrencyMgr.ResetLockTable();
+    string dir = CreateDirectory();
+    var db = new DBSharp.SimpleDB(dir);
+    var tx = db.NewTx();
+    tx.Commit();
+}
+
+static void EmbeddedDriver_Connect()
+{
+    ConcurrencyMgr.ResetLockTable();
+    string dir = CreateDirectory();
+    IDriver driver = new EmbeddedDriver();
+    var conn = driver.Connect(dir);
+    Assert.True(conn is EmbeddedConnection, "Expected EmbeddedConnection");
+    conn.Close();
+}
+
+static void EmbeddedConnection_QueryAndUpdate()
+{
+    ConcurrencyMgr.ResetLockTable();
+    string dir = CreateDirectory();
+    IDriver driver = new EmbeddedDriver();
+    var conn = driver.Connect(dir);
+    var stmt = conn.CreateStatement();
+
+    stmt.ExecuteUpdate("create table student(sname varchar(10), gradyear int)");
+    stmt.ExecuteUpdate("insert into student(sname, gradyear) values('alice', 2024)");
+    stmt.ExecuteUpdate("insert into student(sname, gradyear) values('bob', 2025)");
+    stmt.ExecuteUpdate("insert into student(sname, gradyear) values('carol', 2024)");
+
+    var rs = stmt.ExecuteQuery("select sname, gradyear from student");
+    var results = new List<(string, int)>();
+    while (rs.Next())
+        results.Add((rs.GetString("sname"), rs.GetInt("gradyear")));
+    rs.Close();
+
+    Assert.Equal(3, results.Count);
+
+    int deleted = stmt.ExecuteUpdate("delete from student where gradyear = 2025");
+    Assert.Equal(1, deleted);
+
+    conn.Close();
+}
+
+static void EmbeddedMetaData_ColumnInfo()
+{
+    ConcurrencyMgr.ResetLockTable();
+    string dir = CreateDirectory();
+    IDriver driver = new EmbeddedDriver();
+    var conn = driver.Connect(dir);
+    var stmt = conn.CreateStatement();
+
+    stmt.ExecuteUpdate("create table t(id int, name varchar(20))");
+    stmt.ExecuteUpdate("insert into t(id, name) values(1, 'hello')");
+
+    var rs = stmt.ExecuteQuery("select id, name from t");
+    var md = rs.GetMetaData();
+
+    Assert.Equal(2, md.GetColumnCount());
+    Assert.Equal("id", md.GetColumnName(1));
+    Assert.Equal("name", md.GetColumnName(2));
+    Assert.Equal(DBSharp.Record.Schema.SqlType.INTEGER, md.GetColumnType(1));
+    Assert.Equal(DBSharp.Record.Schema.SqlType.VARCHAR, md.GetColumnType(2));
+    Assert.True(md.GetColumnDisplaySize(2) > 0, "display size should be positive");
+
+    rs.Close();
+    conn.Close();
+}
+
+static void EmbeddedConnection_RollbackOnError()
+{
+    ConcurrencyMgr.ResetLockTable();
+    string dir = CreateDirectory();
+    IDriver driver = new EmbeddedDriver();
+    var conn = driver.Connect(dir);
+    var stmt = conn.CreateStatement();
+
+    stmt.ExecuteUpdate("create table t2(id int)");
+
+    bool threw = false;
+    try { stmt.ExecuteQuery("select bad_field from nonexistent_table"); }
+    catch { threw = true; }
+
+    Assert.True(threw, "expected exception on bad query");
+
+    // connection should still be usable after rollback
+    stmt.ExecuteUpdate("insert into t2(id) values(1)");
+    var rs = stmt.ExecuteQuery("select id from t2");
+    Assert.True(rs.Next(), "expected a row");
+    rs.Close();
+    conn.Close();
+}
+
+static void Network_QueryAndUpdate()
+{
+    ConcurrencyMgr.ResetLockTable();
+    string dir = CreateDirectory();
+    int port = 11200 + (Environment.ProcessId % 1000);
+    var db = new DBSharp.SimpleDB(dir);
+    var server = new SimpleDbServer(db, port);
+
+    var serverThread = new Thread(() => server.Start()) { IsBackground = true };
+    serverThread.Start();
+    Thread.Sleep(200);
+
+    try
+    {
+        IDriver driver = new NetworkDriver(port);
+        var conn = driver.Connect("localhost");
+        var stmt = conn.CreateStatement();
+
+        stmt.ExecuteUpdate("create table emp(name varchar(15), salary int)");
+        stmt.ExecuteUpdate("insert into emp(name, salary) values('dave', 50000)");
+        stmt.ExecuteUpdate("insert into emp(name, salary) values('eve', 60000)");
+
+        var rs = stmt.ExecuteQuery("select name, salary from emp");
+        var results = new List<(string, int)>();
+        while (rs.Next())
+            results.Add((rs.GetString("name"), rs.GetInt("salary")));
+        rs.Close();
+
+        Assert.Equal(2, results.Count);
+
+        var md = stmt.ExecuteQuery("select name, salary from emp").GetMetaData();
+        Assert.Equal(2, md.GetColumnCount());
+
+        conn.Close();
+    }
+    finally
+    {
+        server.Stop();
+    }
 }
 
 class StubScan : IScan
