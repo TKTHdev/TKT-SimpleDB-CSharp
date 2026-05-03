@@ -215,6 +215,40 @@ dotnet build
 dotnet run --project DBSharp.Tests/DBSharp.Tests.csproj
 ```
 
+## インタラクティブ・デモ (REPL)
+
+このプロジェクトには、すぐに試せるインタラクティブなデモアプリケーション（サーバとクライアント REPL）が同梱されています。
+
+### 1. サーバの起動
+1つ目のターミナルでサーバを起動します。TCP でデータベースをホストします。
+```bash
+dotnet run --project Demo/Server
+```
+*(オプション: `[dbdir] [port]`、デフォルトは `demodb` と `1099`)*
+
+### 2. クライアントの起動
+別のターミナルでクライアントを起動し、サーバに接続して SQL を実行します。
+```bash
+dotnet run --project Demo/Client
+```
+*(オプション: `[host] [port]`、デフォルトは `localhost` と `1099`)*
+
+接続後、対話的に SQL コマンドを実行できます：
+```sql
+sql> create table student(sid int, sname varchar(10), gradyear int);
+0 row(s) affected.
+sql> insert into student(sid, sname, gradyear) values(1, 'alice', 2024);
+1 row(s) affected.
+sql> select sid, sname, gradyear from student;
++-----+-------+----------+
+| sid | sname | gradyear |
++-----+-------+----------+
+|   1 | alice |     2024 |
++-----+-------+----------+
+1 row(s).
+sql> \q
+```
+
 ## 利用例 (低レベル API)
 
 ```csharp

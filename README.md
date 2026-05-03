@@ -211,6 +211,40 @@ The test project is a lightweight console runner (not xUnit/NUnit).
 dotnet run --project DBSharp.Tests/DBSharp.Tests.csproj
 ```
 
+## Interactive Demo (REPL)
+
+This project includes a ready-to-use interactive demo application that consists of a server and a client REPL (Read-Eval-Print Loop).
+
+### 1. Start the Server
+Run the server in one terminal. It will host the database over TCP.
+```bash
+dotnet run --project Demo/Server
+```
+*(Optional args: `[dbdir] [port]`, defaults to `demodb` and `1099`)*
+
+### 2. Start the Client
+In a separate terminal, run the client to connect to the server and start typing SQL.
+```bash
+dotnet run --project Demo/Client
+```
+*(Optional args: `[host] [port]`, defaults to `localhost` and `1099`)*
+
+Once connected, you can run SQL commands interactively:
+```sql
+sql> create table student(sid int, sname varchar(10), gradyear int);
+0 row(s) affected.
+sql> insert into student(sid, sname, gradyear) values(1, 'alice', 2024);
+1 row(s) affected.
+sql> select sid, sname, gradyear from student;
++-----+-------+----------+
+| sid | sname | gradyear |
++-----+-------+----------+
+|   1 | alice |     2024 |
++-----+-------+----------+
+1 row(s).
+sql> \q
+```
+
 ## Quick Usage Example (low-level building blocks)
 
 ```csharp
