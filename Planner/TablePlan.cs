@@ -1,0 +1,29 @@
+﻿using DBSharp.Metadata;
+using DBSharp.Record;
+using DBSharp.Scan;
+using DBSharp.Transactions;
+
+namespace DBSharp.Planner;
+
+public class TablePlan : IPlan
+{
+    private Transaction _tx;
+    private string _tblname;
+    private Layout _layout;
+    private StatInfo _si;
+
+    public TablePlan(Transaction tx, string tblname, MetadataMgr md)
+    {
+        _tx = tx;
+        _tblname = tblname;
+        _layout = md.GetLayout(tblname, tx);
+        _si = md.GetStatInfo(tblname, _layout, tx);
+    }
+
+    public IScan open() =>new TableScan(_tx, _tblname, _layout);
+    public int BlockAccessed() => _si.BlocksAccessed();
+    public int RecordsOutput() => _si.RecordsOutput();
+    public int DistinctValues(string _fldname) => _si.DistinctValues(_fldname);
+    public Schema Schema() => _layout.GetSchema();
+    
+}
