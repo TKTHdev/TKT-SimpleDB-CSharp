@@ -24,7 +24,7 @@ public class Term
     {
         return _lhs.AppliesTo(sch) && _rhs.AppliesTo(sch);
     }
-    public int ReductionFactor(Plan p)
+    public int ReductionFactor(IPlan p)
     {
         throw new NotImplementedException();
     }

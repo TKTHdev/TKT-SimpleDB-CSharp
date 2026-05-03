@@ -20,7 +20,7 @@ public class TablePlan : IPlan
         _si = md.GetStatInfo(tblname, _layout, tx);
     }
 
-    public IScan open() =>new TableScan(_tx, _tblname, _layout);
+    public IScan Open() =>new TableScan(_tx, _tblname, _layout);
     public int BlockAccessed() => _si.BlocksAccessed();
     public int RecordsOutput() => _si.RecordsOutput();
     public int DistinctValues(string _fldname) => _si.DistinctValues(_fldname);

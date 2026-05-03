@@ -4,7 +4,7 @@ using DBSharp.Record;
 
 public interface IPlan
 {
-    public IScan open();
+    public IScan Open();
     public int BlockAccessed();
     public int RecordsOutput();
     public int DistinctValues(string fldname);

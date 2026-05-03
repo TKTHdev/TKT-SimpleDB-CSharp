@@ -23,7 +23,7 @@ public class Predicate
         return true;
     }
 
-    public int ReductionFactor(Plan p)
+    public int ReductionFactor(IPlan p)
     {
         throw new NotImplementedException();
     }
