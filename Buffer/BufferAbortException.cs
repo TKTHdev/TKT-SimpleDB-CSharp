@@ -1,4 +1,4 @@
-namespace DBSharp.Buffers;
+namespace AyeAyeDB.Buffers;
 
 /// <summary>
 /// Thrown when a buffer pin request times out because no buffer became available

@@ -1,6 +1,6 @@
-using DBSharp.File;
+using AyeAyeDB.File;
 
-namespace DBSharp.Concurrency;
+namespace AyeAyeDB.Concurrency;
 
 /// <summary>
 /// Global lock table that manages shared and exclusive locks on blocks

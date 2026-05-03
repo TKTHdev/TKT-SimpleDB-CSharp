@@ -1,8 +1,8 @@
-using DBSharp.Parser;
-using DBSharp.Transactions;
-using SqlParser = DBSharp.Parser.Parser;
+using AyeAyeDB.Parser;
+using AyeAyeDB.Transactions;
+using SqlParser = AyeAyeDB.Parser.Parser;
 
-namespace DBSharp.Planner;
+namespace AyeAyeDB.Planner;
 
 public class Planner
 {

@@ -1,7 +1,7 @@
 using System.Collections.ObjectModel;
-namespace DBSharp.Parser;
-using DBSharp.Predicate;
-using DBSharp.Record;
+namespace AyeAyeDB.Parser;
+using AyeAyeDB.Predicate;
+using AyeAyeDB.Record;
 
 public class Parser
 {

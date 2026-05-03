@@ -1,4 +1,4 @@
-namespace DBSharp.Jdbc.Network;
+namespace AyeAyeDB.Jdbc.Network;
 
 /// <summary>
 /// Client-side stub for IRemoteMetaData. Holds metadata fetched once from the server.

@@ -1,8 +1,8 @@
-using DBSharp.Buffers;
-using DBSharp.Log;
-using DBSharp.Transactions;
+using AyeAyeDB.Buffers;
+using AyeAyeDB.Log;
+using AyeAyeDB.Transactions;
 
-namespace DBSharp.Checkpoint;
+namespace AyeAyeDB.Checkpoint;
 
 /// <summary>
 /// Quiescent checkpoint strategy: blocks new transactions, waits for all running

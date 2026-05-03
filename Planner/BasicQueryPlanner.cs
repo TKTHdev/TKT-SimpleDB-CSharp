@@ -1,9 +1,9 @@
 ﻿using System.Collections;
-using DBSharp.Metadata;
-using DBSharp.Parser;
-using DBSharp.Transactions;
+using AyeAyeDB.Metadata;
+using AyeAyeDB.Parser;
+using AyeAyeDB.Transactions;
 
-namespace DBSharp.Planner;
+namespace AyeAyeDB.Planner;
 
 public class BasicQueryPlanner : IQueryPlanner
 {

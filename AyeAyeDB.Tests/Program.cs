@@ -1,16 +1,16 @@
-using DBSharp.Buffers;
-using DBSharp.File;
-using DBSharp.Concurrency;
-using DBSharp.Log;
-using DBSharp.Transactions;
-using DBSharp.Record;
-using DBSharp.Metadata;
-using DBSharp.Predicate;
-using DBSharp.Scan;
-using DBSharp.Planner;
-using DBSharp.Jdbc;
-using DBSharp.Jdbc.Embedded;
-using DBSharp.Jdbc.Network;
+using AyeAyeDB.Buffers;
+using AyeAyeDB.File;
+using AyeAyeDB.Concurrency;
+using AyeAyeDB.Log;
+using AyeAyeDB.Transactions;
+using AyeAyeDB.Record;
+using AyeAyeDB.Metadata;
+using AyeAyeDB.Predicate;
+using AyeAyeDB.Scan;
+using AyeAyeDB.Planner;
+using AyeAyeDB.Jdbc;
+using AyeAyeDB.Jdbc.Embedded;
+using AyeAyeDB.Jdbc.Network;
 using System.Text;
 
 var tests = new (string Name, Action Body)[]
@@ -205,7 +205,7 @@ static void Page_StringRoundTrip()
 {
     var page = new Page(64);
 
-    page.SetString(12, "dbsharp");
+    page.SetString(12, "ayeayedb");
     page.SetString(12, "db");
 
     Assert.Equal("db", page.GetString(12));
@@ -1984,7 +1984,7 @@ static string CreateDirectory()
 
 static string UniqueDirectoryPath()
 {
-    return Path.Combine(Path.GetTempPath(), $"dbsharp-tests-{Guid.NewGuid():N}");
+    return Path.Combine(Path.GetTempPath(), $"ayeayedb-tests-{Guid.NewGuid():N}");
 }
 
 // ── Wait-Die tests ──────────────────────────────────────────────────────────
@@ -2989,7 +2989,7 @@ static void SimpleDB_CreateAndNewTx()
 {
     ConcurrencyMgr.ResetLockTable();
     string dir = CreateDirectory();
-    var db = new DBSharp.SimpleDB(dir);
+    var db = new AyeAyeDB.SimpleDB(dir);
     var tx = db.NewTx();
     tx.Commit();
 }
@@ -3048,8 +3048,8 @@ static void EmbeddedMetaData_ColumnInfo()
     Assert.Equal(2, md.GetColumnCount());
     Assert.Equal("id", md.GetColumnName(1));
     Assert.Equal("name", md.GetColumnName(2));
-    Assert.Equal(DBSharp.Record.Schema.SqlType.INTEGER, md.GetColumnType(1));
-    Assert.Equal(DBSharp.Record.Schema.SqlType.VARCHAR, md.GetColumnType(2));
+    Assert.Equal(AyeAyeDB.Record.Schema.SqlType.INTEGER, md.GetColumnType(1));
+    Assert.Equal(AyeAyeDB.Record.Schema.SqlType.VARCHAR, md.GetColumnType(2));
     Assert.True(md.GetColumnDisplaySize(2) > 0, "display size should be positive");
 
     rs.Close();
@@ -3085,7 +3085,7 @@ static void Network_QueryAndUpdate()
     ConcurrencyMgr.ResetLockTable();
     string dir = CreateDirectory();
     int port = 11200 + (Environment.ProcessId % 1000);
-    var db = new DBSharp.SimpleDB(dir);
+    var db = new AyeAyeDB.SimpleDB(dir);
     var server = new SimpleDbServer(db, port);
 
     var serverThread = new Thread(() => server.Start()) { IsBackground = true };

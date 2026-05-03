@@ -1,4 +1,4 @@
-namespace DBSharp.Metadata;
+namespace AyeAyeDB.Metadata;
 
 public class StatInfo
 {

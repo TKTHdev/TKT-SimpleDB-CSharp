@@ -1,4 +1,4 @@
-namespace DBSharp.Jdbc.Network;
+namespace AyeAyeDB.Jdbc.Network;
 
 /// <summary>
 /// Client-side JDBC Driver that connects to a SimpleDbServer over TCP.

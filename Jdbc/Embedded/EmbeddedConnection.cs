@@ -1,6 +1,6 @@
-using DBSharp.Transactions;
+using AyeAyeDB.Transactions;
 
-namespace DBSharp.Jdbc.Embedded;
+namespace AyeAyeDB.Jdbc.Embedded;
 
 public class EmbeddedConnection : ConnectionAdapter
 {

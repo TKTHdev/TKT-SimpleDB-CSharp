@@ -1,7 +1,7 @@
-using DBSharp;
-using DBSharp.Jdbc.Network;
+using AyeAyeDB;
+using AyeAyeDB.Jdbc.Network;
 
-namespace DBSharp.Demo.Server;
+namespace AyeAyeDB.Demo.Server;
 
 /// <summary>
 /// Demo server: opens (or creates) a SimpleDB database directory and starts

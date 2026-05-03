@@ -1,4 +1,4 @@
-namespace DBSharp.Predicate;
+namespace AyeAyeDB.Predicate;
 
 public class Constant : IComparable<Constant>, IEquatable<Constant>
 {

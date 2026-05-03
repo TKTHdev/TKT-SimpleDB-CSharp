@@ -1,6 +1,6 @@
-namespace DBSharp.Log;
-using DBSharp.File;
-using DBSharp.Transactions;
+namespace AyeAyeDB.Log;
+using AyeAyeDB.File;
+using AyeAyeDB.Transactions;
 
 /// <summary>
 /// Defines the contract for a write-ahead log record. Each record has an operation type,

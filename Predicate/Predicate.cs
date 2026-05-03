@@ -1,7 +1,7 @@
-﻿namespace DBSharp.Predicate;
-using DBSharp.Scan;
-using DBSharp.Planner;
-using DBSharp.Record;
+﻿namespace AyeAyeDB.Predicate;
+using AyeAyeDB.Scan;
+using AyeAyeDB.Planner;
+using AyeAyeDB.Record;
 
 public class Predicate
 {

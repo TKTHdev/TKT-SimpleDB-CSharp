@@ -1,7 +1,7 @@
 ﻿using System.Reflection;
 using Microsoft.VisualBasic.CompilerServices;
 
-namespace DBSharp.Record;
+namespace AyeAyeDB.Record;
 
 public class Schema
 {

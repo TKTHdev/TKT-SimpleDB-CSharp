@@ -1,9 +1,9 @@
-﻿using DBSharp.Metadata;
-using DBSharp.Record;
-using DBSharp.Scan;
-using DBSharp.Transactions;
+﻿using AyeAyeDB.Metadata;
+using AyeAyeDB.Record;
+using AyeAyeDB.Scan;
+using AyeAyeDB.Transactions;
 
-namespace DBSharp.Planner;
+namespace AyeAyeDB.Planner;
 
 public class TablePlan : IPlan
 {

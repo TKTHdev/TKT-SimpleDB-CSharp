@@ -1,6 +1,6 @@
-namespace DBSharp.Parser;
+namespace AyeAyeDB.Parser;
 
-using DBSharp.Record;
+using AyeAyeDB.Record;
 
 public class CreateTableData
 {

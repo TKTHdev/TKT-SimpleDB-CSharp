@@ -1,10 +1,10 @@
-﻿using DBSharp.Metadata;
-using DBSharp.Parser;
-using DBSharp.Predicate;
-using DBSharp.Scan;
-using DBSharp.Transactions;
+﻿using AyeAyeDB.Metadata;
+using AyeAyeDB.Parser;
+using AyeAyeDB.Predicate;
+using AyeAyeDB.Scan;
+using AyeAyeDB.Transactions;
 
-namespace DBSharp.Planner;
+namespace AyeAyeDB.Planner;
 
 public class BasicUpdatePlanner : IUpdatePlanner
 {

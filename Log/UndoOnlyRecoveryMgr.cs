@@ -1,9 +1,9 @@
-using DBSharp.Transactions;
-using DBSharp.Buffers;
-using DBSharp.File;
-using Buffer = DBSharp.Buffers.Buffer;
+using AyeAyeDB.Transactions;
+using AyeAyeDB.Buffers;
+using AyeAyeDB.File;
+using Buffer = AyeAyeDB.Buffers.Buffer;
 
-namespace DBSharp.Log;
+namespace AyeAyeDB.Log;
 
 /// <summary>
 /// Undo-only recovery manager. Uses a force policy: all dirty buffers are flushed

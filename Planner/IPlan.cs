@@ -1,6 +1,6 @@
-﻿namespace DBSharp.Planner;
-using DBSharp.Scan;
-using DBSharp.Record;
+﻿namespace AyeAyeDB.Planner;
+using AyeAyeDB.Scan;
+using AyeAyeDB.Record;
 
 public interface IPlan
 {

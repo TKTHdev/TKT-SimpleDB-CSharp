@@ -1,7 +1,7 @@
-using DBSharp.Record;
+using AyeAyeDB.Record;
 
-namespace DBSharp.Scan;
-using DBSharp.Predicate;
+namespace AyeAyeDB.Scan;
+using AyeAyeDB.Predicate;
 
 
 /*

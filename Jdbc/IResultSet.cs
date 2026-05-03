@@ -1,4 +1,4 @@
-namespace DBSharp.Jdbc;
+namespace AyeAyeDB.Jdbc;
 
 public interface IResultSet
 {

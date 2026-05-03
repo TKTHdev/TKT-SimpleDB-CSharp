@@ -1,6 +1,6 @@
-using DBSharp.File;
+using AyeAyeDB.File;
 
-namespace DBSharp.Buffers;
+namespace AyeAyeDB.Buffers;
 
 /// <summary>
 /// Defines the contract for a buffer manager that pins/unpins disk blocks

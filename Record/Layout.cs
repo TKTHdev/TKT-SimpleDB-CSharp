@@ -1,6 +1,6 @@
-﻿using DBSharp.File;
+﻿using AyeAyeDB.File;
 
-namespace DBSharp.Record;
+namespace AyeAyeDB.Record;
 
 public class Layout
 {

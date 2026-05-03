@@ -1,6 +1,6 @@
-using DBSharp.File;
+using AyeAyeDB.File;
 
-namespace DBSharp.Concurrency;
+namespace AyeAyeDB.Concurrency;
 
 public interface ILockTable
 {

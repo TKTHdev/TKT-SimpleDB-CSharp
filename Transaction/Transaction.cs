@@ -1,10 +1,10 @@
 using System.Collections.Concurrent;
-using DBSharp.Buffers;
-using DBSharp.File;
-using DBSharp.Concurrency;
-using DBSharp.Log;
-namespace DBSharp.Transactions;
-using Buffer = DBSharp.Buffers.Buffer;
+using AyeAyeDB.Buffers;
+using AyeAyeDB.File;
+using AyeAyeDB.Concurrency;
+using AyeAyeDB.Log;
+namespace AyeAyeDB.Transactions;
+using Buffer = AyeAyeDB.Buffers.Buffer;
 
 /// <summary>
 /// Represents a database transaction. Coordinates concurrency control, buffer management,

@@ -1,7 +1,7 @@
-using DBSharp.Record;
-using DBSharp.Transactions;
+using AyeAyeDB.Record;
+using AyeAyeDB.Transactions;
 
-namespace DBSharp.Metadata;
+namespace AyeAyeDB.Metadata;
 
 public class IndexInfo
 {

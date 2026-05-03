@@ -1,9 +1,9 @@
-using DBSharp.Scan;
-using DBSharp.Transactions;
-using DBSharp.Predicate;
-using DBSharp.File;
+using AyeAyeDB.Scan;
+using AyeAyeDB.Transactions;
+using AyeAyeDB.Predicate;
+using AyeAyeDB.File;
 
-namespace DBSharp.Record;
+namespace AyeAyeDB.Record;
 
 public class TableScan : IUpdateScan
 {

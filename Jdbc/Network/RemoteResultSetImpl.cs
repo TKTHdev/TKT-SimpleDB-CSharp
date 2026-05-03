@@ -1,8 +1,8 @@
-using DBSharp.Planner;
-using DBSharp.Record;
-using DBSharp.Scan;
+using AyeAyeDB.Planner;
+using AyeAyeDB.Record;
+using AyeAyeDB.Scan;
 
-namespace DBSharp.Jdbc.Network;
+namespace AyeAyeDB.Jdbc.Network;
 
 public class RemoteResultSetImpl : IRemoteResultSet
 {

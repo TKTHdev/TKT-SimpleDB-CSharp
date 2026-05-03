@@ -1,7 +1,7 @@
-using DBSharp.File;
-using DBSharp.Log;
+using AyeAyeDB.File;
+using AyeAyeDB.Log;
 
-namespace DBSharp.Buffers;
+namespace AyeAyeDB.Buffers;
 
 /// <summary>
 /// Base class for buffer managers. Provides the common pin/unpin/flush logic

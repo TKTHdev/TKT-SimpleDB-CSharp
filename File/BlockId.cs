@@ -1,4 +1,4 @@
-namespace DBSharp.File;
+namespace AyeAyeDB.File;
 
 /// <summary>
 /// Identifies a specific block within a file by its filename and block number.

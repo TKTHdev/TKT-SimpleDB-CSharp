@@ -1,6 +1,6 @@
-namespace DBSharp.Log;
+namespace AyeAyeDB.Log;
 
-using DBSharp.File;
+using AyeAyeDB.File;
 
 /// <summary>
 /// Manages the write-ahead log (WAL). Log records are appended to an in-memory page

@@ -1,6 +1,6 @@
-﻿namespace DBSharp.Predicate;
-using DBSharp.Scan;
-using DBSharp.Record;
+﻿namespace AyeAyeDB.Predicate;
+using AyeAyeDB.Scan;
+using AyeAyeDB.Record;
 
 public class Expression
 {

@@ -1,6 +1,6 @@
-using DBSharp.Record;
+using AyeAyeDB.Record;
 
-namespace DBSharp.Jdbc.Network;
+namespace AyeAyeDB.Jdbc.Network;
 
 public class RemoteMetaDataImpl : IRemoteMetaData
 {

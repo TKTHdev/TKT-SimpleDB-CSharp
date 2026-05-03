@@ -1,6 +1,6 @@
-using DBSharp.File;
+using AyeAyeDB.File;
 
-namespace DBSharp.Concurrency;
+namespace AyeAyeDB.Concurrency;
 
 /// <summary>
 /// Per-transaction concurrency manager that tracks which locks the transaction holds

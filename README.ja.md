@@ -1,6 +1,6 @@
-# DBSharp
+# AyeAyeDB
 
-DBSharp は C#（.NET 8）で実装している、学習目的のデータベースエンジンです。
+AyeAyeDB は C#（.NET 8）で実装している、学習目的のデータベースエンジンです。
 ストレージ層の基礎からトランザクション処理、さらに JDBC 互換のクライアント API
 （埋め込み版・ネットワーク版）まで段階的に実装しています。
 
@@ -13,7 +13,7 @@ DBSharp は C#（.NET 8）で実装している、学習目的のデータベー
 - 静止型・非静止型チェックポイント
 - コミット・ロールバック・クラッシュリカバリ対応のトランザクション
 - レコードマネージャ、メタデータカタログ、スキャン、述語、クエリ/更新プランナ
-- **JDBC 風のクライアント API**（`DBSharp.Jdbc`）— **埋め込み版**と **ネットワーク版（RMI 相当）**
+- **JDBC 風のクライアント API**（`AyeAyeDB.Jdbc`）— **埋め込み版**と **ネットワーク版（RMI 相当）**
 - **`SimpleDB` ファサードクラス** — FileMgr / LogMgr / BufferMgr / MetadataMgr / Planner を一括で構築
 
 ## 現在の実装状況
@@ -114,7 +114,7 @@ DBSharp は C#（.NET 8）で実装している、学習目的のデータベー
 ## ディレクトリ構成
 
 ```text
-DBSharp/
+AyeAyeDB/
 ├── SimpleDB.cs                    # 最上位ファサード (FileMgr+LogMgr+BufferMgr+MetadataMgr+Planner)
 ├── Buffer/
 │   ├── Buffer.cs
@@ -193,7 +193,7 @@ DBSharp/
 │       ├── NetworkStatement.cs
 │       ├── NetworkResultSet.cs
 │       └── NetworkMetaData.cs
-└── DBSharp.Tests/
+└── AyeAyeDB.Tests/
     └── Program.cs
 ```
 
@@ -212,7 +212,7 @@ dotnet build
 テストプロジェクトは xUnit/NUnit ではなく、コンソールベースの軽量ランナーです。
 
 ```bash
-dotnet run --project DBSharp.Tests/DBSharp.Tests.csproj
+dotnet run --project AyeAyeDB.Tests/AyeAyeDB.Tests.csproj
 ```
 
 ## インタラクティブ・デモ (REPL)
@@ -252,10 +252,10 @@ sql> \q
 ## 利用例 (低レベル API)
 
 ```csharp
-using DBSharp.File;
-using DBSharp.Log;
-using DBSharp.Buffers;
-using DBSharp.Transactions;
+using AyeAyeDB.File;
+using AyeAyeDB.Log;
+using AyeAyeDB.Buffers;
+using AyeAyeDB.Transactions;
 
 var fm = new FileMgr(new DirectoryInfo("mydb"), blocksize: 400);
 var lm = new LogMgr(fm, "simpledb.log");
@@ -278,8 +278,8 @@ tx.Commit();
 構築し、JDBC 風の `IConnection` を返します。
 
 ```csharp
-using DBSharp.Jdbc;
-using DBSharp.Jdbc.Embedded;
+using AyeAyeDB.Jdbc;
+using AyeAyeDB.Jdbc.Embedded;
 
 IDriver driver = new EmbeddedDriver();
 IConnection conn = driver.Connect("studentdb"); // ディレクトリパス
@@ -319,8 +319,8 @@ conn.Close(); // コミットしてコネクションを解放
 サーバとして動かすには、`SimpleDB` を作って `SimpleDbServer` に渡します。
 
 ```csharp
-using DBSharp;
-using DBSharp.Jdbc.Network;
+using AyeAyeDB;
+using AyeAyeDB.Jdbc.Network;
 
 var db = new SimpleDB("studentdb");           // DB を開くか作成する
 var server = new SimpleDbServer(db, port: 1099);
@@ -332,8 +332,8 @@ server.Start();
 クライアントプロセスからは `NetworkDriver` をホスト名に向けるだけです。
 
 ```csharp
-using DBSharp.Jdbc;
-using DBSharp.Jdbc.Network;
+using AyeAyeDB.Jdbc;
+using AyeAyeDB.Jdbc.Network;
 
 IDriver driver = new NetworkDriver(port: 1099);
 IConnection conn = driver.Connect("localhost"); // サーバのホスト名 / IP

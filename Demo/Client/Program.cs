@@ -1,8 +1,8 @@
-using DBSharp.Jdbc;
-using DBSharp.Jdbc.Network;
-using DBSharp.Record;
+using AyeAyeDB.Jdbc;
+using AyeAyeDB.Jdbc.Network;
+using AyeAyeDB.Record;
 
-namespace DBSharp.Demo.Client;
+namespace AyeAyeDB.Demo.Client;
 
 /// <summary>
 /// Demo client: connects to a SimpleDbServer over TCP and runs SQL statements.

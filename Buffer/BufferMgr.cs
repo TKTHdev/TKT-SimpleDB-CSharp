@@ -1,7 +1,7 @@
-using DBSharp.File;
-using DBSharp.Log;
+using AyeAyeDB.File;
+using AyeAyeDB.Log;
 
-namespace DBSharp.Buffers;
+namespace AyeAyeDB.Buffers;
 
 /// <summary>
 /// Naive replacement strategy: picks the first unpinned buffer found.

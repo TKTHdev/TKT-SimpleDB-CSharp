@@ -1,7 +1,7 @@
 using System.Net;
 using System.Net.Sockets;
 
-namespace DBSharp.Jdbc.Network;
+namespace AyeAyeDB.Jdbc.Network;
 
 /// <summary>
 /// TCP server that accepts JDBC-like connections to a SimpleDB database.

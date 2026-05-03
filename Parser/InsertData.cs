@@ -1,6 +1,6 @@
-namespace DBSharp.Parser;
+namespace AyeAyeDB.Parser;
 
-using DBSharp.Predicate;
+using AyeAyeDB.Predicate;
 
 public class InsertData
 {

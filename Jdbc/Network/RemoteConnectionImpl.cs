@@ -1,6 +1,6 @@
-using DBSharp.Transactions;
+using AyeAyeDB.Transactions;
 
-namespace DBSharp.Jdbc.Network;
+namespace AyeAyeDB.Jdbc.Network;
 
 public class RemoteConnectionImpl : IRemoteConnection
 {

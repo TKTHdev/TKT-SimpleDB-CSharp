@@ -1,7 +1,7 @@
-using DBSharp.Buffers;
-using DBSharp.Log;
+using AyeAyeDB.Buffers;
+using AyeAyeDB.Log;
 
-namespace DBSharp.Checkpoint;
+namespace AyeAyeDB.Checkpoint;
 
 /// <summary>
 /// Defines a strategy for performing a database checkpoint.

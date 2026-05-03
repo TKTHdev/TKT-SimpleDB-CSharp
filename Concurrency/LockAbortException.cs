@@ -1,4 +1,4 @@
-namespace DBSharp.Concurrency;
+namespace AyeAyeDB.Concurrency;
 
 /// <summary>
 /// Thrown when a lock request times out because the lock could not be acquired

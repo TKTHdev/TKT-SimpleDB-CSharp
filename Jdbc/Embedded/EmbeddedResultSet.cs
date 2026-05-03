@@ -1,8 +1,8 @@
-using DBSharp.Planner;
-using DBSharp.Record;
-using DBSharp.Scan;
+using AyeAyeDB.Planner;
+using AyeAyeDB.Record;
+using AyeAyeDB.Scan;
 
-namespace DBSharp.Jdbc.Embedded;
+namespace AyeAyeDB.Jdbc.Embedded;
 
 public class EmbeddedResultSet : ResultSetAdapter
 {

@@ -5,12 +5,12 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <RootNamespace>DBSharp.Demo.Client</RootNamespace>
-    <AssemblyName>DBSharp.Demo.Client</AssemblyName>
+    <RootNamespace>AyeAyeDB.Demo.Client</RootNamespace>
+    <AssemblyName>AyeAyeDB.Demo.Client</AssemblyName>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\DBSharp.csproj" />
+    <ProjectReference Include="..\..\AyeAyeDB.csproj" />
   </ItemGroup>
 
 </Project>

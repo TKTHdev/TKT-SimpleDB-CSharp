@@ -1,8 +1,8 @@
 using System.Collections;
 
-using DBSharp.File;
+using AyeAyeDB.File;
 
-namespace DBSharp.Log;
+namespace AyeAyeDB.Log;
 
 /// <summary>
 /// Iterates over log records in chronological order, starting from the

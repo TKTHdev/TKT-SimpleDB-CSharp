@@ -1,7 +1,7 @@
-using DBSharp.Record;
-using DBSharp.Scan;
+using AyeAyeDB.Record;
+using AyeAyeDB.Scan;
 
-namespace DBSharp.Planner;
+namespace AyeAyeDB.Planner;
 
 public class ProductPlan : IPlan
 {

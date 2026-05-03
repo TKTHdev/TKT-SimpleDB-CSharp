@@ -1,11 +1,11 @@
-using DBSharp.Buffers;
-using DBSharp.File;
-using DBSharp.Log;
-using DBSharp.Metadata;
-using DBSharp.Planner;
-using DBSharp.Transactions;
+using AyeAyeDB.Buffers;
+using AyeAyeDB.File;
+using AyeAyeDB.Log;
+using AyeAyeDB.Metadata;
+using AyeAyeDB.Planner;
+using AyeAyeDB.Transactions;
 
-namespace DBSharp;
+namespace AyeAyeDB;
 
 public class SimpleDB
 {

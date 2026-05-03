@@ -1,5 +1,5 @@
-﻿namespace DBSharp.Log;
-using DBSharp.Buffers;
+﻿namespace AyeAyeDB.Log;
+using AyeAyeDB.Buffers;
 
 public interface IRecoveryMgr
 {

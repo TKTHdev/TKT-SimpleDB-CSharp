@@ -1,7 +1,7 @@
-﻿using DBSharp.Parser;
-using DBSharp.Transactions;
+﻿using AyeAyeDB.Parser;
+using AyeAyeDB.Transactions;
 
-namespace DBSharp.Planner;
+namespace AyeAyeDB.Planner;
 
 public interface IUpdatePlanner
 {

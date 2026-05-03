@@ -1,7 +1,7 @@
-using DBSharp.Buffers;
-using DBSharp.File;
-namespace DBSharp.Transactions;
-using Buffer = DBSharp.Buffers.Buffer;
+using AyeAyeDB.Buffers;
+using AyeAyeDB.File;
+namespace AyeAyeDB.Transactions;
+using Buffer = AyeAyeDB.Buffers.Buffer;
 
 /// <summary>
 /// Manages the list of currently pinned buffers for a single transaction.

@@ -1,6 +1,6 @@
-namespace DBSharp.Scan;
-using DBSharp.Predicate;
-using DBSharp.Record;
+namespace AyeAyeDB.Scan;
+using AyeAyeDB.Predicate;
+using AyeAyeDB.Record;
 
 
 

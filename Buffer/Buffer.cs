@@ -1,7 +1,7 @@
-using DBSharp.File;
-using DBSharp.Log;
+using AyeAyeDB.File;
+using AyeAyeDB.Log;
 
-namespace DBSharp.Buffers;
+namespace AyeAyeDB.Buffers;
 
 /// <summary>
 /// Represents a single buffer in the buffer pool. A buffer wraps an in-memory page

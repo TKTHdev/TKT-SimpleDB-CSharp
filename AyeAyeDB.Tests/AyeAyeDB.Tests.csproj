@@ -8,7 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\DBSharp.csproj" />
+    <ProjectReference Include="..\AyeAyeDB.csproj" />
   </ItemGroup>
 
 </Project>

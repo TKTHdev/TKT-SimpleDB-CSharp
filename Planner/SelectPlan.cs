@@ -1,8 +1,8 @@
-﻿using DBSharp.Record;
-using DBSharp.Scan;
+﻿using AyeAyeDB.Record;
+using AyeAyeDB.Scan;
 
-namespace DBSharp.Planner;
-using DBSharp.Predicate;
+namespace AyeAyeDB.Planner;
+using AyeAyeDB.Predicate;
 
 public class SelectPlan : IPlan
 {

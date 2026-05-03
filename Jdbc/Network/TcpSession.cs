@@ -1,6 +1,6 @@
 using System.Net.Sockets;
 
-namespace DBSharp.Jdbc.Network;
+namespace AyeAyeDB.Jdbc.Network;
 
 /// <summary>
 /// Manages the TCP connection to the SimpleDbServer.

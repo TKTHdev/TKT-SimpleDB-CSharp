@@ -1,4 +1,4 @@
-﻿namespace DBSharp.Parser;
+﻿namespace AyeAyeDB.Parser;
 
 public class PredParser
 {

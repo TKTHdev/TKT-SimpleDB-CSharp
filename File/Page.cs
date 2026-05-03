@@ -1,4 +1,4 @@
-namespace DBSharp.File;
+namespace AyeAyeDB.File;
 
 using System.Text;
 

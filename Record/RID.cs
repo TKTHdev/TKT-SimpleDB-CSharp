@@ -1,4 +1,4 @@
-namespace DBSharp.Record;
+namespace AyeAyeDB.Record;
 
 public class RID
 {

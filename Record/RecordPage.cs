@@ -1,6 +1,6 @@
-﻿namespace DBSharp.Record;
-using DBSharp.Transactions;
-using DBSharp.File;
+﻿namespace AyeAyeDB.Record;
+using AyeAyeDB.Transactions;
+using AyeAyeDB.File;
 
 public class RecordPage
 {

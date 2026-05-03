@@ -1,6 +1,6 @@
-﻿using DBSharp.Predicate;
+﻿using AyeAyeDB.Predicate;
 
-namespace DBSharp.Scan;
+namespace AyeAyeDB.Scan;
 
 public interface IScan
 {

@@ -1,4 +1,4 @@
-namespace DBSharp.Jdbc.Network;
+namespace AyeAyeDB.Jdbc.Network;
 
 public interface IRemoteStatement
 {

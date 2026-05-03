@@ -1,6 +1,6 @@
-# DBSharp
+# AyeAyeDB
 
-DBSharp is a work-in-progress educational database engine in C# (.NET 8).
+AyeAyeDB is a work-in-progress educational database engine in C# (.NET 8).
 The implementation covers storage-layer fundamentals through transaction processing
 and now exposes a JDBC-style client API (both embedded and network):
 
@@ -13,7 +13,7 @@ and now exposes a JDBC-style client API (both embedded and network):
 - quiescent and non-quiescent checkpointing
 - transactions with commit, rollback, and crash recovery
 - record manager, metadata catalog, scans, predicates, query/update planner
-- **JDBC-style client API** (`DBSharp.Jdbc`) with both **embedded** and **network/RMI-style** modes
+- **JDBC-style client API** (`AyeAyeDB.Jdbc`) with both **embedded** and **network/RMI-style** modes
 - **`SimpleDB` facade class** that wires up FileMgr, LogMgr, BufferMgr, MetadataMgr, and Planner
 
 ## Status
@@ -110,7 +110,7 @@ Implemented and covered by local tests:
 ## Repository Layout
 
 ```text
-DBSharp/
+AyeAyeDB/
 ├── SimpleDB.cs                    # top-level facade (FileMgr+LogMgr+BufferMgr+MetadataMgr+Planner)
 ├── Buffer/
 │   ├── Buffer.cs
@@ -189,7 +189,7 @@ DBSharp/
 │       ├── NetworkStatement.cs
 │       ├── NetworkResultSet.cs
 │       └── NetworkMetaData.cs
-└── DBSharp.Tests/
+└── AyeAyeDB.Tests/
     └── Program.cs
 ```
 
@@ -208,7 +208,7 @@ dotnet build
 The test project is a lightweight console runner (not xUnit/NUnit).
 
 ```bash
-dotnet run --project DBSharp.Tests/DBSharp.Tests.csproj
+dotnet run --project AyeAyeDB.Tests/AyeAyeDB.Tests.csproj
 ```
 
 ## Interactive Demo (REPL)
@@ -248,10 +248,10 @@ sql> \q
 ## Quick Usage Example (low-level building blocks)
 
 ```csharp
-using DBSharp.File;
-using DBSharp.Log;
-using DBSharp.Buffers;
-using DBSharp.Transactions;
+using AyeAyeDB.File;
+using AyeAyeDB.Log;
+using AyeAyeDB.Buffers;
+using AyeAyeDB.Transactions;
 
 var fm = new FileMgr(new DirectoryInfo("mydb"), blocksize: 400);
 var lm = new LogMgr(fm, "simpledb.log");
@@ -274,8 +274,8 @@ tx.Commit();
 `SimpleDB` from a directory path and gives back a JDBC-style `IConnection`.
 
 ```csharp
-using DBSharp.Jdbc;
-using DBSharp.Jdbc.Embedded;
+using AyeAyeDB.Jdbc;
+using AyeAyeDB.Jdbc.Embedded;
 
 IDriver driver = new EmbeddedDriver();
 IConnection conn = driver.Connect("studentdb"); // directory path
@@ -314,8 +314,8 @@ Behavior to be aware of:
 To run as a server, instantiate `SimpleDB` and hand it to `SimpleDbServer`:
 
 ```csharp
-using DBSharp;
-using DBSharp.Jdbc.Network;
+using AyeAyeDB;
+using AyeAyeDB.Jdbc.Network;
 
 var db = new SimpleDB("studentdb");           // open or create the database
 var server = new SimpleDbServer(db, port: 1099);
@@ -327,8 +327,8 @@ server.Start();
 From a client process, point a `NetworkDriver` at the host:
 
 ```csharp
-using DBSharp.Jdbc;
-using DBSharp.Jdbc.Network;
+using AyeAyeDB.Jdbc;
+using AyeAyeDB.Jdbc.Network;
 
 IDriver driver = new NetworkDriver(port: 1099);
 IConnection conn = driver.Connect("localhost");   // host (or IP) of the server

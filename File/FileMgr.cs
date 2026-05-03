@@ -1,4 +1,4 @@
-namespace DBSharp.File;
+namespace AyeAyeDB.File;
 
 /// <summary>
 /// Manages read, write, and append operations on block-level database files.

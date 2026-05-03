@@ -1,7 +1,7 @@
-﻿namespace DBSharp.Predicate;
-using DBSharp.Scan;
-using DBSharp.Record;
-using DBSharp.Planner;
+﻿namespace AyeAyeDB.Predicate;
+using AyeAyeDB.Scan;
+using AyeAyeDB.Record;
+using AyeAyeDB.Planner;
 
 public class Term
 {

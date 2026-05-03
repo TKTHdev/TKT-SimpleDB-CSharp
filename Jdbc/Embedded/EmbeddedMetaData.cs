@@ -1,6 +1,6 @@
-using DBSharp.Record;
+using AyeAyeDB.Record;
 
-namespace DBSharp.Jdbc.Embedded;
+namespace AyeAyeDB.Jdbc.Embedded;
 
 public class EmbeddedMetaData : ResultSetMetaDataAdapter
 {

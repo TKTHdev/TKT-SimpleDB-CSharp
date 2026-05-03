@@ -1,4 +1,4 @@
-namespace DBSharp.Jdbc.Embedded;
+namespace AyeAyeDB.Jdbc.Embedded;
 
 public class EmbeddedStatement : StatementAdapter
 {

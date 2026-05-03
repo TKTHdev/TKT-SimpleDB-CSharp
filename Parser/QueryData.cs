@@ -1,7 +1,7 @@
 ﻿using System.Collections.ObjectModel;
-namespace DBSharp.Parser;
+namespace AyeAyeDB.Parser;
 
-using Predicate = global::DBSharp.Predicate.Predicate;
+using Predicate = global::AyeAyeDB.Predicate.Predicate;
 
 public class QueryData
 {

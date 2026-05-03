@@ -1,8 +1,8 @@
-﻿using DBSharp.Buffers;
-using Buffer = DBSharp.Buffers.Buffer;
-using DBSharp.Transactions;
-using DBSharp.File;
-namespace DBSharp.Log;
+﻿using AyeAyeDB.Buffers;
+using Buffer = AyeAyeDB.Buffers.Buffer;
+using AyeAyeDB.Transactions;
+using AyeAyeDB.File;
+namespace AyeAyeDB.Log;
 
 /// <summary>
 /// Undo/Redo recovery manager. Unlike <see cref="UndoOnlyRecoveryMgr"/>, this manager
