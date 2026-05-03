@@ -1,4 +1,5 @@
 # AyeAyeDB
+<img width="450px" src="logo.png">
 
 AyeAyeDB is a work-in-progress educational database engine in C# (.NET 8).
 The implementation covers storage-layer fundamentals through transaction processing

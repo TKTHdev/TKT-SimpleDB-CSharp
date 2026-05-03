@@ -1,4 +1,5 @@
 # AyeAyeDB
+<img width="450px" src="logo.png">
 
 AyeAyeDB は C#（.NET 8）で実装している、学習目的のデータベースエンジンです。
 ストレージ層の基礎からトランザクション処理、さらに JDBC 互換のクライアント API
