@@ -7,6 +7,7 @@ using DBSharp.Record;
 using DBSharp.Metadata;
 using DBSharp.Predicate;
 using DBSharp.Scan;
+using DBSharp.Planner;
 using System.Text;
 
 var tests = new (string Name, Action Body)[]
@@ -99,6 +100,7 @@ var tests = new (string Name, Action Body)[]
     ("StatMgr returns statistics for a table", StatMgr_Test),
     ("IndexMgr createIndex and getIndexInfo round trip", IndexMgr_Test),
     ("MetadataMgr facade delegates to all sub-managers", MetadataMgr_Test),
+    ("Planner executes query and update", Planner_Test),
     ("Predicate empty predicate is always satisfied", Predicate_EmptyIsSatisfied),
     ("Predicate single matching term is satisfied", Predicate_SingleTermSatisfied),
     ("Predicate single non-matching term is not satisfied", Predicate_SingleTermNotSatisfied),
@@ -2859,6 +2861,41 @@ static void MetadataMgr_Test()
     Assert.True(ii.RecordsOutput() >= 0, "R(indexA) should be >= 0");
     Assert.True(ii.DistinctValues("A") >= 0, "V(indexA,A) should be >= 0");
     Assert.True(ii.DistinctValues("B") >= 0, "V(indexA,B) should be >= 0");
+
+    tx.Commit();
+}
+
+// ── Planner tests ────────────────────────────────────────────────────────────
+
+static void Planner_Test()
+{
+    var (fm, lm, bm) = CreateTxTestDeps();
+    var tx = new Transaction(fm, lm, bm);
+    var mdm = new MetadataMgr(true, tx);
+    var qplanner = new BasicQueryPlanner(mdm);
+    var uplanner = new BasicUpdatePlanner(mdm);
+    var planner = new Planner(qplanner, uplanner);
+
+    // setup: create student table and insert records (simulating pre-existing studentdb)
+    planner.ExecuteUpdate("create table student(sname varchar(10), majorid int, gradyear int)", tx);
+    planner.ExecuteUpdate("insert into student(sname, majorid, gradyear) values('joe', 10, 2021)", tx);
+    planner.ExecuteUpdate("insert into student(sname, majorid, gradyear) values('amy', 20, 2022)", tx);
+    planner.ExecuteUpdate("insert into student(sname, majorid, gradyear) values('bob', 30, 2020)", tx);
+    planner.ExecuteUpdate("insert into student(sname, majorid, gradyear) values('sue', 30, 2022)", tx);
+
+    // part 1: Process a query
+    string qry = "select sname, gradyear from student";
+    IPlan p = planner.CreateQueryPlan(qry, tx);
+    IScan s = p.Open();
+    while (s.Next())
+        Console.WriteLine(s.GetString("sname") + " " + s.GetInt("gradyear"));
+    s.Close();
+
+    // part 2: Process an update command
+    string cmd = "delete from student where majorid = 30";
+    int num = planner.ExecuteUpdate(cmd, tx);
+    Console.WriteLine(num + " students were deleted");
+    Assert.Equal(2, num);
 
     tx.Commit();
 }

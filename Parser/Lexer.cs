@@ -12,6 +12,7 @@ public class Lexer
       _tok.OrdinaryChar('.');
       _tok.WordChars('_', '_');
       _tok.LowerCaseMode(true);
+      NextToken();
    }
 
    public bool MatchDelim(char d)
