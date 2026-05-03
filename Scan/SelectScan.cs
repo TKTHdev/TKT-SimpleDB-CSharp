@@ -12,7 +12,7 @@ public class SelectScan : IUpdateScan
     public SelectScan(IScan s, Predicate p)
     {
         _s = s;
-        _pred = _pred;
+        _pred = p;
     }
 
     public void BeforeFirst()
