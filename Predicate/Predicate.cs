@@ -40,12 +40,26 @@ public class Predicate
 
     public Constant EquatesWithConstant(string fldname)
     {
-        throw new NotImplementedException();
+        foreach (Term t in _terms)
+        {
+            Constant c = t.EquatesWithConstant(fldname);
+            if(c!=null)
+                return c;
+        }
+
+        return null;
     }
 
     public string EquatesWithField(string fldname)
     {
-        throw new NotImplementedException();
+        foreach (Term t in _terms)
+        {
+            string s = t.EquatesWithField(fldname);
+            if (s != null)
+                return s;
+        }
+
+        return null;
     }
 
     public override string ToString()
