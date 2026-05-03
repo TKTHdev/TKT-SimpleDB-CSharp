@@ -31,12 +31,31 @@ public class Term
 
     public Constant EquatesWithConstant(string fldname)
     {
-        throw new NotImplementedException();
+        if (_lhs.IsFieldName() &&
+            _lhs.AsFieldName().Equals(fldname) &&
+            !_rhs.IsFieldName()
+           )
+            return _rhs.AsConstant();
+        else if (_rhs.IsFieldName() &&
+                 _rhs.AsFieldName().Equals(fldname) &&
+                 !_lhs.IsFieldName())
+            return _lhs.AsConstant();
+        else
+            return null;
     }
 
     public string EquatesWithField(string fldname)
     {
-        throw new NotImplementedException();
+        if (_lhs.IsFieldName() &&
+            _lhs.AsFieldName().Equals(fldname) &&
+            _rhs.IsFieldName())
+            return _rhs.AsFieldName();
+        else if (_rhs.IsFieldName() &&
+                 _rhs.AsFieldName().Equals(fldname) &&
+                 _lhs.IsFieldName())
+            return _lhs.AsFieldName();
+        else
+            return null;
     }
 
     public override string ToString()
