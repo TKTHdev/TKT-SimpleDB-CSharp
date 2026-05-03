@@ -12,6 +12,9 @@
     <Compile Remove="DBSharp.Tests/**/*.cs" />
     <EmbeddedResource Remove="DBSharp.Tests/**/*" />
     <None Remove="DBSharp.Tests/**/*" />
+    <Compile Remove="Demo/**/*.cs" />
+    <EmbeddedResource Remove="Demo/**/*" />
+    <None Remove="Demo/**/*" />
   </ItemGroup>
 
 </Project>
