@@ -12,7 +12,7 @@ public class TablePlan : IPlan
     private Layout _layout;
     private StatInfo _si;
 
-    public TablePlan(Transaction tx, string tblname, MetadataMgr md)
+    public TablePlan(string tblname,Transaction tx, MetadataMgr md)
     {
         _tx = tx;
         _tblname = tblname;
