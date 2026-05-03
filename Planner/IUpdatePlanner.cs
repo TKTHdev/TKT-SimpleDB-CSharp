@@ -3,7 +3,7 @@ using DBSharp.Transactions;
 
 namespace DBSharp.Planner;
 
-public interface UpdatePlanner
+public interface IUpdatePlanner
 {
     public int ExecuteInsert(InsertData data, Transaction tx);
     public int ExecuteDelete(DeleteData data, Transaction tx);

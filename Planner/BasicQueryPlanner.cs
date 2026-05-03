@@ -5,7 +5,7 @@ using DBSharp.Transactions;
 
 namespace DBSharp.Planner;
 
-public class BasicQueryPlanner : QueryPlanner
+public class BasicQueryPlanner : IQueryPlanner
 {
     private MetadataMgr _mdm;
     public BasicQueryPlanner(MetadataMgr mdm) => _mdm = mdm;
