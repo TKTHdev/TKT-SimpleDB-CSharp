@@ -1,2 +1,13 @@
 bin/
 obj/
+.idea/
+.vs/
+.claude/
+.config/
+_site/
+api/
+docfx.json
+qodana.yaml
+book.pdf
+demodb/
+Folder.DotSettings.user
